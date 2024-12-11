@@ -16,8 +16,8 @@ public class ImageManipulator {
 
         switch (manipulation_type) {
             case "1" -> pixel_array = sortPixels(img, scanner);
-            case "2" -> makeGreyscale(scanner);
-            case "3" -> performBlur(scanner);
+            case "2" -> pixel_array = makeGreyscale(img, scanner);
+            case "3" -> pixel_array = performBlur(img, scanner);
             case "4" -> pixel_array = createMask(img);
             default -> {
             }
@@ -125,21 +125,21 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static void performBlur(Scanner scanner) throws IOException{
-        char blur_type = getBlurType(scanner);   
-        File img_file = getImageFile(scanner);
-        BufferedImage img = ImageIO.read(img_file);
-        String file_name;
+    private static int[][] performBlur(BufferedImage img, Scanner scanner) throws IOException{
+        char blur_type = getBlurType(scanner);
+        int[][] pixels;
 
         if(blur_type == 'b'){
-            img = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
+            pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
+        } else{
+            pixels = get2DPixelArray(img);
+            System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
         }
 
-        file_name = getString(scanner, "What do you wish to save your file as? (do not include file type)");
-        saveImage(file_name, img);
+        return pixels;
     }
 
-    private static BufferedImage boxBlur(BufferedImage img, int box_size){
+    private static int[][] boxBlur(BufferedImage img, int box_size){
         int[][] pixels = get2DPixelArray(img);
         int height = img.getHeight();
         int width = img.getWidth();
@@ -150,8 +150,7 @@ public class ImageManipulator {
             }
         }
 
-        img = createImage(pixels, img);
-        return img;
+        return pixels;
     }
 
     private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
@@ -194,26 +193,20 @@ public class ImageManipulator {
         return blur.charAt(0);
     }
 
-    private static void makeGreyscale(Scanner scanner) throws IOException{
-        File img_file = getImageFile(scanner);
-        BufferedImage img = ImageIO.read(img_file);
-        String file_name;
+    private static int[][] makeGreyscale(BufferedImage img, Scanner scanner) throws IOException{
         int[][] pixels = get2DPixelArray(img);
         int luminance;
         int greyscale_colour;
 
-        for(int row = 0; row < pixels.length; row++){
-            for(int col = 0; col < pixels[row].length; col++){
-                luminance = calculateLuminance(pixels[row][col]);
+        for (int[] pixel_row : pixels) {
+            for (int col = 0; col < pixel_row.length; col++) {
+                luminance = calculateLuminance(pixel_row[col]);
                 greyscale_colour = (luminance << 16) + (luminance << 8) + luminance;
-                pixels[row][col] = greyscale_colour;
+                pixel_row[col] = greyscale_colour;
             }
         }
 
-        img = createImage(pixels, img);
-        
-        file_name = getString(scanner, "What do you wish to save your file as? (do not include file type)");
-        saveImage(file_name, img);
+        return pixels;
     }
 
     //returns true if vertical, false if horizontal
