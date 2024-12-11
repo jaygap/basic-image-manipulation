@@ -9,6 +9,7 @@ public class ImageManipulator {
     public static void main(String[] args) throws IOException {
         Scanner scanner = new Scanner(System.in);
         File image_file = getImageFile(scanner);
+
         String manipulation_type = getManipulationType(scanner);
         BufferedImage img = ImageIO.read(image_file);
         String file_name;
@@ -227,25 +228,6 @@ public class ImageManipulator {
 
         //returns false if input is h or true if not h (which means its v)
         return !input.equals("h");
-    }
-
-    private static void pixelSort(Scanner scanner) throws IOException{
-        File img_file = getImageFile(scanner);
-        boolean sort_vertical = getSortDirection(scanner);
-        int[][] pixel_array;
-        char colour_sort;
-        String file_name;
-
-        BufferedImage img = ImageIO.read(img_file);
-        pixel_array = get2DPixelArray(img);
-
-        colour_sort = getColourToSortBy(scanner);
-        pixel_array = sortPixels(pixel_array, sort_vertical, colour_sort);
-
-        img = createImage(pixel_array, img);
-        file_name = getString(scanner, "What do you wish to save your file as? (do not include file type)");
-
-        saveImage(file_name, img);
     }
 
     private static int[][] sortPixels(int[][] pixels, boolean sort_vertical, char colour_to_sort_by) throws IOException{
@@ -506,7 +488,15 @@ public class ImageManipulator {
     }
 
     private static File getImageFile(Scanner scanner){
-        String image_path = getString(scanner, "Enter the full path of the file you want to pixel sort.");
+        String image_path = getString(scanner, "Enter the full path of the image you want to pixel sort.");
+        File image = new File(image_path);
+        
+        while(!isFileValid(image)){
+            System.out.println("File path is invalid, please try again.");
+            image_path = getString(scanner, "Enter the full path of the image you want to pixel sort.");
+            image = new File(image_path);
+        }
+
         return new File(image_path);
     }
 
@@ -547,6 +537,10 @@ public class ImageManipulator {
         }
 
         return true;
+    }
+
+    private static boolean isFileValid(File file){
+        return file.exists();
     }
 
     //#endregion
