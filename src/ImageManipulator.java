@@ -195,14 +195,20 @@ public class ImageManipulator {
     }
 
     private static int[][] makeGreyscale(BufferedImage img, Scanner scanner) throws IOException{
+        boolean use_luminance = getBoolean(scanner, "Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] {"l", "b"});
         int[][] pixels = get2DPixelArray(img);
-        int luminance;
+        int grey;
         int greyscale_colour;
 
         for (int[] pixel_row : pixels) {
             for (int col = 0; col < pixel_row.length; col++) {
-                luminance = calculateLuminance(pixel_row[col]);
-                greyscale_colour = (luminance << 16) + (luminance << 8) + luminance;
+                if(use_luminance){
+                    grey = calculateLuminance(pixel_row[col]);
+                } else{
+                    grey = calculateBrightness(pixel_row[col]);
+                }
+
+                greyscale_colour = (grey << 16) + (grey << 8) + grey;
                 pixel_row[col] = greyscale_colour;
             }
         }
@@ -454,6 +460,15 @@ public class ImageManipulator {
         return img;
     }
 
+    private static int calculateBrightness(int abgr){
+        int red, green, blue;
+        red = abgr & 0x000000FF;
+        green = (abgr & 0x0000FF00) >> 8;
+        blue = (abgr & 0x00FF0000) >> 16;
+        
+        return (red + green + blue) / 3;
+    }
+
     private static int calculateLuminance(int abgr){
         int red, green, blue;
         int red_coefficient = (int) Math.round(0.2126 * 255);
@@ -518,6 +533,44 @@ public class ImageManipulator {
         }
 
         return input_as_int;
+    }
+
+    /**
+     * 
+     * @param scanner
+     * @param message
+     * @param valid_responses // the first element must be the true one and there must be at least 2 elements
+     * @return boolean
+     */
+    private static boolean getBoolean(Scanner scanner, String message, String[] valid_responses){
+        String input;
+        boolean return_value = false;
+        boolean is_valid = false;
+
+        while(!is_valid){
+            input = getString(scanner, message);
+
+            if(input.equals(valid_responses[0])){
+                return_value = true;
+                is_valid = true;
+            } else{
+                for(int i = 1; i < valid_responses.length;i++){
+                    if(input.equals(valid_responses[i])){
+                        return_value = false;
+                        is_valid = true;
+                    }
+                }
+            }
+
+            if(!is_valid){
+                System.out.println("That is not a valid response. You must type one of the following:");
+                for(String response : valid_responses){
+                    System.out.println("\"" + response +"\"");
+                }
+            }
+        }
+
+        return return_value;
     }
 
     private static boolean checkIfInt(String s){
