@@ -1,14 +1,18 @@
 import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferByte;
+import java.awt.image.Raster;
+import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
 import java.util.Scanner;
 import javax.imageio.ImageIO;
 
+
 public class ImageManipulator {
+
     public static void main(String[] args) throws IOException {
         Scanner scanner = new Scanner(System.in);
         File image_file = getImageFile(scanner);
+        WritableRaster edited_image;
 
         String manipulation_type = getManipulationType(scanner);
         BufferedImage img = ImageIO.read(image_file);
@@ -24,54 +28,129 @@ public class ImageManipulator {
             }
         }
 
-        img = createImage(pixel_array, img);
+        edited_image = createImage(pixel_array, img);
 
         file_name = getString(scanner, "What do you wish to save your file as? (do not include filetype)");
-        saveImage(file_name, img);
+        saveImage(file_name, edited_image);
     }
     
     private static int[][] sortPixels(BufferedImage img, Scanner scanner){
         int[][] pixels = get2DPixelArray(img);
-        int[][] mask_of_pixels = new int[pixels.length][pixels[0].length];
-        int[] temp_array;
+
         int height = img.getHeight(), width = img.getWidth(); 
-        final int lower_threshold = 0x33, upper_threshold = 0xcc;
+
+        boolean use_mask;
         char sorting_property = getColourToSortBy(scanner);
         boolean sort_vertical;
-        int starting_point, length;
-
-        mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, lower_threshold, upper_threshold);
 
         sort_vertical = getSortDirection(scanner);  
 
-        if(sort_vertical){
+        use_mask = useMask(scanner);
 
+
+        if(use_mask){
+            int[][] mask_of_pixels = new int[pixels.length][pixels[0].length];
+            mask_of_pixels = createMask2DArray(pixels, mask_of_pixels);
+
+            pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_vertical);
         } else{
-            for(int row = 0; row < height; row ++){
-                starting_point = -1;
+            pixels = sortPixelWihtoutMask(pixels, height, width, sorting_property, sort_vertical);
+        }
+
+        return pixels;
+    }
+
+    private static int[][] sortPixelWihtoutMask(int[][] pixels, int height, int width, char sorting_property,boolean sort_vertical){
+        int[] temp_array;
+
+        if(sort_vertical){
+            for(int col = 0; col < width; col++){
+                temp_array = new int[height];
+                
+                for(int row = 0; row < height; row++){
+                    temp_array[row] = pixels[row][col];
+                }
+
+                temp_array = mergeSortPixels(temp_array, sorting_property);
+
+                for(int row = 0; row < height; row++){
+                    pixels[row][col] = temp_array[row];
+                }
+            }
+        } else{
+            for(int row = 0; row < height; row++){
+                temp_array = pixels[row];
+
+                temp_array = mergeSortPixels(temp_array, sorting_property);
+
+                System.arraycopy(temp_array, 0, pixels[row], 0, width);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int[][] sortPixelWithMask(int[][] pixels, int[][] mask, int height, int width, char sorting_property, boolean sort_vertical){
+        int[] temp_array;
+        int starting_pos;
+        int length;
+        final int WHITE = 0x00ffffff;
+        final int BLACK = 0x00000000;
+
+        if(sort_vertical){
+            for(int col = 0; col < width; col++){
+                starting_pos = -1;
                 length = 0;
 
-                for(int col = 0; col < width; col++){
-                    if(mask_of_pixels[row][col] != 0 && starting_point == -1){
-                        starting_point = col;
+                for(int row = 0; row < height; row++){
+                    if(mask[row][col] == WHITE && starting_pos == -1){
+                        starting_pos = row;
                         length++;
-                    } else if(mask_of_pixels[row][col] != 0){
+                    } else if(mask[row][col] == WHITE){
                         length++;
-                    } else if(mask_of_pixels[row][col] == 0 && starting_point != -1){
-
+                    } else if(mask[row][col] == BLACK && starting_pos != -1){
                         temp_array = new int[length];
 
                         for(int i = 0; i < length; i++){
-                            temp_array[i] = pixels[row][starting_point + i]; 
+                            temp_array[i] = pixels[starting_pos + i][col];
                         }
 
                         temp_array = mergeSortPixels(temp_array, sorting_property);
 
                         for(int i = 0; i < length; i++){
-                            pixels[row][starting_point + i] = temp_array[i];
+                            pixels[starting_pos + i][col] = temp_array[i];
                         }
 
-                        starting_point = -1;
+                        starting_pos = -1;
+                        length = 0;
+                    }
+                }
+            }
+        } else{
+            for(int row = 0; row < height; row++){
+                starting_pos = -1;
+                length = 0;
+
+                for(int col = 0; col < width; col++){
+                    if(mask[row][col] == WHITE && starting_pos == -1){
+                        starting_pos = col;
+                        length++;
+                    } else if(mask[row][col] == WHITE){
+                        length++;
+                    } else if(mask[row][col] == BLACK && starting_pos != -1){
+                        temp_array = new int[length];
+
+                        for(int i = 0; i < length; i++){
+                            temp_array[i] = pixels[row][starting_pos + i];
+                        }
+
+                        temp_array = mergeSortPixels(temp_array, sorting_property);
+
+                        for(int i = 0; i < length; i++){
+                            pixels[row][starting_pos + i] = temp_array[i];
+                        }
+
+                        starting_pos = -1;
                         length = 0;
                     }
                 }
@@ -81,20 +160,79 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to,int lower_threshold, int upper_threshold){
+    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to){
+        final int WHITE = 0x00ffffff;
+        final int BLACK = 0x00000000;
+
+        final int THRESHOLD = otsuThreshold(pixels);
+
         for(int row = 0; row < pixels.length; row++){
             for(int col = 0; col < pixels[0].length; col++){
                 int luminance = calculateLuminance(pixels[row][col]);
 
-                if(lower_threshold < luminance && luminance < upper_threshold){
-                    array_to_write_to[row][col] = 0x00ffffff;
+                if(luminance <= THRESHOLD){
+                    array_to_write_to[row][col] = WHITE;
                 } else{
-                    array_to_write_to[row][col] = 0x00000000;
+                    array_to_write_to[row][col] = BLACK;
                 }
             }
         }
 
         return array_to_write_to;
+    }
+
+    private static int otsuThreshold(int[][] pixels){
+        final int luminance_range = 256;
+        int[] luminance_histogram = new int[luminance_range];
+        float[] square_variance = new float[luminance_range];
+        float weight_background, weight_foreground, mu_background, mu_foreground; 
+        float highest_variance = -1;
+        int highest_variance_index = 0;
+
+        for(int row = 0; row < pixels.length; row++){
+            for(int col = 0; col < pixels[0].length; col++){
+                int luminance = calculateLuminance(pixels[row][col]);
+                luminance_histogram[luminance]++;
+            }
+        }
+
+        for(int i = 0; i < luminance_histogram.length; i++){
+            weight_background = 0;
+            weight_foreground = 0;
+            mu_background = 0;
+            mu_foreground = 0;
+            int mean_number = 0;
+
+            for(int j = 0; j <= i; j++){
+                weight_background += luminance_histogram[i];
+                mu_background += i * luminance_histogram[i];
+                mean_number += luminance_histogram[i];
+            }
+
+            mu_background /= mean_number;
+            weight_background /= luminance_range;
+            mean_number = 0;
+
+            for(int j = i + 1; j < luminance_histogram.length; j++){
+                weight_foreground += luminance_histogram[i];
+                mu_foreground += i * luminance_histogram[i];
+                mean_number += luminance_histogram[i];
+            }
+
+            mu_foreground /= mean_number;
+            weight_foreground /= luminance_range;
+
+            square_variance[i] = weight_background * weight_foreground * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
+        }
+
+        for(int i = 0; i < square_variance.length; i++){
+            if(square_variance[i] > highest_variance){
+                highest_variance = square_variance[i];
+                highest_variance_index = i;
+            }
+        }
+
+        return highest_variance_index;
     }
 
     private static String getManipulationType(Scanner scanner){
@@ -115,18 +253,15 @@ public class ImageManipulator {
         return choice;
     }
 
-    private static int[][] createMask(BufferedImage img) throws IOException{
+    private static int[][] createMask(BufferedImage img){
         int[][] pixels = get2DPixelArray(img);
-        //these are arbitrary values
-        final int lower_threshold = 0x33;
-        final int upper_threshold = 0xaa;
 
-        pixels = createMask2DArray(pixels, pixels, lower_threshold, upper_threshold);
+        pixels = createMask2DArray(pixels, pixels);
 
         return pixels;
     }
 
-    private static int[][] performBlur(BufferedImage img, Scanner scanner) throws IOException{
+    private static int[][] performBlur(BufferedImage img, Scanner scanner){
         char blur_type = getBlurType(scanner);
         int[][] pixels;
 
@@ -194,7 +329,7 @@ public class ImageManipulator {
         return blur.charAt(0);
     }
 
-    private static int[][] makeGreyscale(BufferedImage img, Scanner scanner) throws IOException{
+    private static int[][] makeGreyscale(BufferedImage img, Scanner scanner){
         boolean use_luminance = getBoolean(scanner, "Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] {"l", "b"});
         int[][] pixels = get2DPixelArray(img);
         int grey;
@@ -236,22 +371,6 @@ public class ImageManipulator {
         return !input.equals("h");
     }
 
-    private static int[][] sortPixels(int[][] pixels, boolean sort_vertical, char colour_to_sort_by) throws IOException{
-
-        int width = pixels[0].length, height = pixels.length;
-
-        if(sort_vertical){
-            //eventually do this
-
-        } else{
-            for(int i = 0; i < height; i++){
-                pixels[i] = mergeSortPixels(pixels[i], colour_to_sort_by);
-            }
-        }
-
-        return pixels;
-    }
-
     private static int[] mergeSortPixels(int[] pixels, char colour_to_sort_by){
         if(pixels.length == 1){
             return pixels;
@@ -263,7 +382,10 @@ public class ImageManipulator {
 
         for(int i = 0; i < mid; i++){
             left[i] = pixels[i];
-            right[i] = pixels[mid + i];
+        }
+
+        for(int i = mid; i < pixels.length; i++){
+            right[i - mid] = pixels[i];
         }
 
         left = mergeSortPixels(left, colour_to_sort_by);
@@ -311,10 +433,10 @@ public class ImageManipulator {
         int mask;
 
         mask = switch (property) {
-            case 'b' -> 0x00FF0000;
-            case 'g' -> 0x0000FF00;
-            case 'r' -> 0x000000FF;
-            default -> 0xFFFFFFFF; //this is for grey_scale and overall comparison
+            case 'b' -> 0x00ff0000;
+            case 'g' -> 0x0000ff00;
+            case 'r' -> 0x000000ff;
+            default ->  0xffffffff; //this is for grey_scale and overall comparison
         };
 
         if(property == 'l'){
@@ -349,115 +471,75 @@ public class ImageManipulator {
         return colour.charAt(0);
     }
 
+    private static boolean useMask(Scanner scanner){
+        String response = "";
+        boolean valid = false;
+
+        while(!valid){
+            response = getString(scanner, "Should a mask be used? (y/n)");
+            response = response.toLowerCase();
+
+            if(response.equals("y") || response.equals("n")){
+                valid = true;
+            } else{
+                System.out.println("You must enter either \"y\" or \"n\".");
+            }
+        }
+
+        return response.equals("y");
+    }
+
     // GENERIC METHODS
     // get2DPixelArray, getString, getInt, createImage, getImageFile, saveImageFile, checkIfInt, calculateLuminance, arrayContainsString
     //#region
 
     private static int[][] get2DPixelArray(BufferedImage img){
-        byte[] pixel_data = ((DataBufferByte) img.getRaster().getDataBuffer()).getData();
-        int width = img.getWidth(), height = img.getHeight();
-        
-        //checks if the image has an alpha channel by checking if you can write to it.
-        boolean has_alpha = img.getAlphaRaster() != null;
-        int[][] result = new int[height][width];
-        
-        //the number of values stored by each pixel
-        int number_of_values; 
+        Raster image_raster = img.getData();
+        int width = image_raster.getWidth(), height = image_raster.getHeight();
 
-        if(has_alpha){
-            number_of_values = 4;
+        int[][] pixels = new int[height][width];
+        int values_per_pixel = (img.getAlphaRaster() != null) ? 4 /* rgba */: 3 /* rgb */;
+        int[] temp = new int[values_per_pixel];
 
-            for(int value_pointer = 0, row = 0, col = 0; value_pointer + number_of_values - 1 < pixel_data.length; value_pointer += number_of_values){
-                //pixel data is stored as abgr
-                int abgr = 0; //value stored for pixel (8 bits for each alpha, blue, green, red)
-                abgr += (((int) pixel_data[value_pointer]) & 0xff) << 24;
-                abgr += (((int) pixel_data[value_pointer + 1]) & 0xff) << 16;
-                abgr += (((int) pixel_data[value_pointer + 2]) & 0xff) << 8;
-                abgr += (((int) pixel_data[value_pointer + 3]) & 0xff);
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                temp = image_raster.getPixel(col, row, temp);
+                // returns rgba
 
-                result[row][col] = abgr;
-
-                col++;
-
-                if(col == width){
-                    col = 0;
-                    row++;
-                }
-            }
-        } else{
-            number_of_values = 3;
-
-            for(int value_pointer = 0, row = 0, col = 0; value_pointer + number_of_values - 1 < pixel_data.length; value_pointer += number_of_values){
-                //pixel data is stored as bgr
-                int bgr = 0;
-
-                bgr += (((int) pixel_data[value_pointer ]) & 0xff) << 16;
-                bgr += (((int) pixel_data[value_pointer + 1]) & 0xff) << 8;
-                bgr += (((int) pixel_data[value_pointer + 2]) & 0xff);
-
-                result[row][col] = bgr;
-
-                col++;
-
-                if(col == width){
-                    col = 0;
-                    row++;
+                //abgr
+                if(values_per_pixel == 4){
+                    pixels[row][col] = ((temp[3] & 0xff) << 24) + ((temp[2] & 0xff) << 16) + ((temp[1] & 0xff) << 8) + (temp[0] & 0xff);
+                } else{ //bgr
+                    pixels[row][col] = (temp[2] << 16) + (temp[1] << 8) + temp[0];
                 }
             }
         }
 
-        return result;
+        return pixels;
     }
 
-    private static BufferedImage createImage(int[][] sorted_pixels, BufferedImage img){
-        byte[] image_buffer = ((DataBufferByte) img.getRaster().getDataBuffer()).getData();
+    private static WritableRaster createImage(int[][] sorted_pixels, BufferedImage img){
+        WritableRaster raster = img.getRaster();
+        int width = raster.getWidth(), height = raster.getHeight();
 
-        int width = img.getWidth();
-        int height = img.getHeight();
+        int values_per_pixel = (img.getAlphaRaster() != null) ? 4 : 3;
+        int[] temp = new int[values_per_pixel];
 
-        byte pixel_element;
-        boolean has_alpha = img.getAlphaRaster() != null;
-        int pointer = 0;
-        int multiplier = has_alpha ? 4 : 3;
-        int row = 0, col = 0;
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                temp[0] = (sorted_pixels[row][col] & 0x000000ff);
+                temp[1] = (sorted_pixels[row][col] & 0x0000ff00) >> 8;
+                temp[2] = (sorted_pixels[row][col] & 0x00ff0000) >> 16;
 
-        do{
+                if(values_per_pixel == 4){
+                    temp[3] = (sorted_pixels[row][col] & 0xff000000) >> 24;
+                }
 
-            if(has_alpha){
-                pixel_element = (byte)((sorted_pixels[row][col] & 0xFF000000) >> 24);
-                image_buffer[pointer] = pixel_element;
-            
-                pixel_element = (byte)((sorted_pixels[row][col] & 0x00FF0000) >> 16);
-                image_buffer[pointer + 1] = pixel_element;
-            
-                pixel_element = (byte)((sorted_pixels[row][col] & 0x0000FF00) >> 8);
-                image_buffer[pointer + 2] = pixel_element;
-
-                pixel_element = (byte)(sorted_pixels[row][col] & 0x000000FF);
-                image_buffer[pointer + 3] = pixel_element;
-            } else{
-
-                pixel_element = (byte)((sorted_pixels[row][col] & 0x00FF0000) >> 16);
-                image_buffer[pointer] = pixel_element;
-            
-                pixel_element = (byte)((sorted_pixels[row][col] & 0x0000FF00) >> 8);
-                image_buffer[pointer + 1] = pixel_element;
-            
-                pixel_element = (byte)(sorted_pixels[row][col] & 0x000000FF);
-                image_buffer[pointer + 2] = pixel_element;    
+                raster.setPixel(col, row, temp);
             }
+        }
 
-            col++;
-
-            if(col == width){
-                col = 0;
-                row++;
-            }
-
-            pointer = (row * width + col) * multiplier;
-        } while(row < height);
-
-        return img;
+        return raster;
     }
 
     private static int calculateBrightness(int abgr){
@@ -482,9 +564,12 @@ public class ImageManipulator {
         return (red * red_coefficient + green * green_coefficient + blue * blue_coefficient) / 255;
     }
 
-    private static void saveImage(String file_name, BufferedImage img) throws IOException{
+    private static void saveImage(String file_name, WritableRaster img) throws IOException{
         File img_file = new File(file_name + ".png");
-        ImageIO.write(img, "png", img_file);
+        int type = img.getNumBands() == 4 ? BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR;
+        BufferedImage buffer = new BufferedImage(img.getWidth(), img.getHeight(), type);
+        buffer.setData(img);
+        ImageIO.write(buffer, "png", img_file);
     }
 
     private static boolean arrayContainsString(String[] array, String target){
