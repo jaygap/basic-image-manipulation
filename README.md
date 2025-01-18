@@ -2,7 +2,6 @@
 
 ## Plans
 - Add Gaussian blur
-- Add vertical pixel sorting
 - Add option to choose to sort by ascending or descending
 - Add edge-detection option
 - Add resizing option (up and down)
