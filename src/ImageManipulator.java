@@ -267,6 +267,8 @@ public class ImageManipulator {
 
         if(blur_type == 'b'){
             pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
+        } else if(blur_type == 'g'){
+            pixels = gaussianBlur(img, getInt(scanner, "Enter a size for the gaussian blur: (will require larger sizes to achieve the same level of bluriness as box blur)"));
         } else{
             pixels = get2DPixelArray(img);
             System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
@@ -287,6 +289,57 @@ public class ImageManipulator {
         }
 
         return pixels;
+    }
+
+    private static int[][] gaussianBlur(BufferedImage img, int size){
+        final double[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
+        int[][] pixels = get2DPixelArray(img);
+        final int width = img.getWidth(), height = img.getHeight();
+        
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                pixels[row][col] = calculateGaussianBlur(pixels, row, col, GAUSSIAN_DISTRIBUTION);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int calculateGaussianBlur(int[][] pixels, int row, int col, double[][] distribution){
+        final int size = (distribution.length - 1) / 2;
+        final int mid_point = size;
+        int red = 0, green = 0, blue = 0;
+        int pixel_colour;
+
+        for(int x = -size; x <= size; x++){
+            for(int y = -size; y <= size; y++){
+                if(!(row + y < 0 || row + y >= pixels.length || col + x < 0 || col + x >= pixels[0].length)){
+                    red += Math.round((pixels[row + y][col + x] & 0x000000ff) * distribution[mid_point + y][mid_point + x]);
+                    green += Math.round(((pixels[row + y][col + x] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]);
+                    blue += Math.round(((pixels[row + y][col + x] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]);
+                }
+            }
+        }
+
+        pixel_colour = (blue << 16) + (green << 8) + red;
+
+        return pixel_colour;
+    }
+
+    private static double[][] calculateGaussianDistribution(int size){
+        final double VARIANCE = 1;
+        final double EULER_NUM = Math.E; 
+        final double CONSTANT_PART_OF_EQUATION = (1 / (2 * Math.PI * VARIANCE * VARIANCE));
+        final int mid_point = size;
+        double[][] distrib = new double[size * 2 + 1][size * 2 + 1];
+
+        for(int x = -size; x <= size; x++){
+            for(int y = -size; y <= size; y++){
+                distrib[mid_point + x][mid_point + y] = CONSTANT_PART_OF_EQUATION * Math.pow(EULER_NUM, - ((x * x) + (y * y)) / (2.0d * VARIANCE * VARIANCE));
+            }
+        }
+
+        return distrib;
     }
 
     private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
@@ -317,9 +370,9 @@ public class ImageManipulator {
         boolean is_valid = false;
 
         while(!is_valid){
-            blur = getString(scanner, "Choose the type of blur to perform: (b)ox blur"); //ADD MORE BLUR OPTIONS
+            blur = getString(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur"); //ADD MORE BLUR OPTIONS
             
-            if(blur.equals("b")){
+            if(blur.equals("b") || blur.equals("g")){
                 is_valid = true;
             } else{
                 System.out.println("Enter the character in the brackets to the left of the option.");
