@@ -23,7 +23,7 @@ public class ImageManipulator {
             case "1" -> pixel_array = sortPixels(img, scanner);
             case "2" -> pixel_array = makeGreyscale(img, scanner);
             case "3" -> pixel_array = performBlur(img, scanner);
-            case "4" -> pixel_array = createMask(img);
+            case "4" -> pixel_array = createMask(img, scanner);
             default -> {
             }
         }
@@ -50,7 +50,8 @@ public class ImageManipulator {
 
         if(use_mask){
             int[][] mask_of_pixels = new int[pixels.length][pixels[0].length];
-            mask_of_pixels = createMask2DArray(pixels, mask_of_pixels);
+            char masking_property = getMaskingProperty(scanner);
+            mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, masking_property);
 
             pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_vertical);
         } else{
@@ -160,20 +161,28 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to){
+    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to, char property_to_mask_with){
         final int WHITE = 0x00ffffff;
         final int BLACK = 0x00000000;
 
-        final int THRESHOLD = otsuThreshold(pixels);
+        final int THRESHOLD = otsuThreshold(pixels, property_to_mask_with);
 
         for(int row = 0; row < pixels.length; row++){
             for(int col = 0; col < pixels[0].length; col++){
-                int luminance = calculateLuminance(pixels[row][col]);
+                int value = getPixelProperty(pixels[row][col], property_to_mask_with);
 
-                if(luminance <= THRESHOLD){
-                    array_to_write_to[row][col] = WHITE;
+                if(THRESHOLD < 128){
+                    if(value <= THRESHOLD){
+                        array_to_write_to[row][col] = WHITE;
+                    } else{
+                        array_to_write_to[row][col] = BLACK;
+                    }
                 } else{
-                    array_to_write_to[row][col] = BLACK;
+                    if(value >= THRESHOLD){
+                        array_to_write_to[row][col] = WHITE;
+                    } else{
+                        array_to_write_to[row][col] = BLACK;
+                    }
                 }
             }
         }
@@ -181,22 +190,32 @@ public class ImageManipulator {
         return array_to_write_to;
     }
 
-    private static int otsuThreshold(int[][] pixels){
-        final int luminance_range = 256;
-        int[] luminance_histogram = new int[luminance_range];
-        float[] square_variance = new float[luminance_range];
+    private static int getPixelProperty(int pixel, char property){
+        switch(property){
+            case 'r': return pixel & 0x000000ff;
+            case 'g': return (pixel & 0x0000ff00) >> 8;
+            case 'b': return (pixel & 0x00ff0000) >> 16;
+            case 'l': return calculateLuminance(pixel); 
+            default : return pixel;
+        }
+    }
+
+    private static int otsuThreshold(int[][] pixels, char property){
+        final int range = 256;
+        int[] histogram = new int[range];
+        float[] square_variance = new float[range];
         float weight_background, weight_foreground, mu_background, mu_foreground; 
         float highest_variance = -1;
         int highest_variance_index = 0;
 
         for(int row = 0; row < pixels.length; row++){
             for(int col = 0; col < pixels[0].length; col++){
-                int luminance = calculateLuminance(pixels[row][col]);
-                luminance_histogram[luminance]++;
+                int value = getPixelProperty(pixels[row][col], property);
+                histogram[value]++;
             }
         }
 
-        for(int i = 0; i < luminance_histogram.length; i++){
+        for(int i = 0; i < histogram.length; i++){
             weight_background = 0;
             weight_foreground = 0;
             mu_background = 0;
@@ -204,23 +223,23 @@ public class ImageManipulator {
             int mean_number = 0;
 
             for(int j = 0; j <= i; j++){
-                weight_background += luminance_histogram[i];
-                mu_background += i * luminance_histogram[i];
-                mean_number += luminance_histogram[i];
+                weight_background += histogram[i];
+                mu_background += i * histogram[i];
+                mean_number += histogram[i];
             }
 
             mu_background /= mean_number;
-            weight_background /= luminance_range;
+            weight_background /= range;
             mean_number = 0;
 
-            for(int j = i + 1; j < luminance_histogram.length; j++){
-                weight_foreground += luminance_histogram[i];
-                mu_foreground += i * luminance_histogram[i];
-                mean_number += luminance_histogram[i];
+            for(int j = i + 1; j < histogram.length; j++){
+                weight_foreground += histogram[i];
+                mu_foreground += i * histogram[i];
+                mean_number += histogram[i];
             }
 
             mu_foreground /= mean_number;
-            weight_foreground /= luminance_range;
+            weight_foreground /= range;
 
             square_variance[i] = weight_background * weight_foreground * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
         }
@@ -253,12 +272,41 @@ public class ImageManipulator {
         return choice;
     }
 
-    private static int[][] createMask(BufferedImage img){
+    private static int[][] createMask(BufferedImage img, Scanner scanner){
         int[][] pixels = get2DPixelArray(img);
+        char property = getMaskingProperty(scanner);
 
-        pixels = createMask2DArray(pixels, pixels);
+        pixels = createMask2DArray(pixels, pixels, property);
 
         return pixels;
+    }
+
+    private static char getMaskingProperty(Scanner scanner){
+        char[] valid_choices = {'r', 'g', 'b', 'l', 'h'};
+        String choice = "";
+        boolean choice_is_valid = false;
+
+        while(!choice_is_valid){
+            choice = getString(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue");
+
+            if(choice.length() == 1 && arrayContainsChar(valid_choices, choice.charAt(0))){
+                choice_is_valid = true;
+            } else{
+                System.out.println("You must enter only one of the characters in the brackets.");
+            }
+        }
+
+        return choice.charAt(0);
+    }
+
+    private static boolean arrayContainsChar(char[] array, char target){
+        for(int i = 0; i < array.length; i++){
+            if(array[i] == target){
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int[][] performBlur(BufferedImage img, Scanner scanner){
@@ -268,7 +316,7 @@ public class ImageManipulator {
         if(blur_type == 'b'){
             pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
         } else if(blur_type == 'g'){
-            pixels = gaussianBlur(img, getInt(scanner, "Enter a size for the gaussian blur: (will require larger sizes to achieve the same level of bluriness as box blur)"));
+            pixels = gaussianBlur(img, getInt(scanner, "Enter a size for the gaussian blur: (blur is significantly less noticeable even at larger sizes)"));
         } else{
             pixels = get2DPixelArray(img);
             System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
@@ -302,44 +350,63 @@ public class ImageManipulator {
             }
         }
 
+       System.out.println("complete");
+        
         return pixels;
     }
 
     private static int calculateGaussianBlur(int[][] pixels, int row, int col, double[][] distribution){
         final int size = (distribution.length - 1) / 2;
         final int mid_point = size;
-        int red = 0, green = 0, blue = 0;
+        final int width = pixels[0].length, height = pixels.length;
+        double red = 0, green = 0, blue = 0;
         int pixel_colour;
 
         for(int x = -size; x <= size; x++){
             for(int y = -size; y <= size; y++){
-                if(!(row + y < 0 || row + y >= pixels.length || col + x < 0 || col + x >= pixels[0].length)){
-                    red += Math.round((pixels[row + y][col + x] & 0x000000ff) * distribution[mid_point + y][mid_point + x]);
-                    green += Math.round(((pixels[row + y][col + x] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]);
-                    blue += Math.round(((pixels[row + y][col + x] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]);
-                }
+                red += (pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x000000ff) * distribution[mid_point + y][mid_point + x]; 
+                green += ((pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]; 
+                blue += ((pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]; 
             }
         }
 
-        pixel_colour = (blue << 16) + (green << 8) + red;
+        pixel_colour = (((int) blue) << 16) + (((int) green) << 8) + ((int) red);
 
         return pixel_colour;
     }
 
+    private static int getTrueIndex(int position, int offset, int upper_bound){
+        if(position + offset < 0){
+            return upper_bound + (position + offset);
+        }
+
+        return (position + offset) % upper_bound;
+    }
+
     private static double[][] calculateGaussianDistribution(int size){
-        final double VARIANCE = 1;
-        final double EULER_NUM = Math.E; 
-        final double CONSTANT_PART_OF_EQUATION = (1 / (2 * Math.PI * VARIANCE * VARIANCE));
+        final double STANDARD_DEVIATION = (double) size / (Math.sqrt((double) size));
         final int mid_point = size;
+        double sum = 0;
         double[][] distrib = new double[size * 2 + 1][size * 2 + 1];
 
-        for(int x = -size; x <= size; x++){
-            for(int y = -size; y <= size; y++){
-                distrib[mid_point + x][mid_point + y] = CONSTANT_PART_OF_EQUATION * Math.pow(EULER_NUM, - ((x * x) + (y * y)) / (2.0d * VARIANCE * VARIANCE));
+        for(int y = -size; y <= size; y++){
+            for(int x = -size; x <= size; x++){
+                distrib[mid_point + y][mid_point + x] = gaussianEquation(STANDARD_DEVIATION, x, y);
+                sum += distrib[mid_point + y][mid_point + x]; 
+            }
+        }
+
+        for(int y = -size; y <= size; y++){
+            for(int x = -size; x <= size; x++){
+                distrib[mid_point + y][mid_point + x] /= sum;
             }
         }
 
         return distrib;
+    }
+
+    private static double gaussianEquation(double standard_deviation, int x, int y){
+        return (1.0d / (2.0d * Math.PI * standard_deviation * standard_deviation)) * Math.exp(- ((x * x) + (y * y)) / (2.0d * standard_deviation * standard_deviation));
     }
 
     private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
