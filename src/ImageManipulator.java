@@ -191,13 +191,14 @@ public class ImageManipulator {
     }
 
     private static int getPixelProperty(int pixel, char property){
-        switch(property){
-            case 'r': return pixel & 0x000000ff;
-            case 'g': return (pixel & 0x0000ff00) >> 8;
-            case 'b': return (pixel & 0x00ff0000) >> 16;
-            case 'l': return calculateLuminance(pixel); 
-            default : return pixel;
-        }
+        return switch (property) {
+            case 'r' -> pixel & 0x000000ff;
+            case 'g' -> (pixel & 0x0000ff00) >> 8;
+            case 'b' -> (pixel & 0x00ff0000) >> 16;
+            case 'l' -> calculateLuminance(pixel);
+            case 'h' -> calculateHue(pixel);
+            default -> pixel;
+        };
     }
 
     private static int otsuThreshold(int[][] pixels, char property){
@@ -567,7 +568,7 @@ public class ImageManipulator {
 
             return left_luminance > right_luminance;
         } else if(property == 'h'){
-            return left_pixel > right_pixel;
+            return calculateHue(left_pixel) > calculateHue(right_pixel);
         } else{
             return (left_pixel & mask) > (right_pixel & mask);
         }
@@ -799,6 +800,33 @@ public class ImageManipulator {
 
     private static boolean isFileValid(File file){
         return file.exists();
+    }
+
+    private static int calculateHue(int abgr){
+        double red, green, blue;
+        double max, min;
+        double hue = 0;
+
+        red = (double) (abgr & 0x000000ff) / 256.0d;
+        green = (double) ((abgr & 0x0000ff00) >> 8) / 256.0d;
+        blue = (double) ((abgr & 0x00ff0000) >> 16) / 256.0d;
+
+        max = Math.max(Math.max(red, green), blue);
+        min = Math.min(Math.min(red, green), blue);
+
+        if(red >= green && red >= blue){
+            hue = (int) ((green - blue) / (max - min) * 60);
+        } else if (green >= red && green >= blue){
+            hue = (int) ((2 + (blue - red) / (max - min)) * 60);
+        } else if (blue >= red && blue >= green){
+            hue = (int) ((4 + (red - green) / (max - min)) * 60);
+        }
+
+        if(hue < 0){
+            hue += 360;
+        }
+
+        return (int) (hue * (17.0d / 24.0d)); // scales hue from 0-360 to 0-255
     }
 
     //#endregion
