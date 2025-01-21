@@ -34,6 +34,9 @@ public class ImageManipulator {
         saveImage(file_name, edited_image);
     }
     
+    //Pixel sorting methods
+    //#region
+
     private static int[][] sortPixels(BufferedImage img, Scanner scanner){
         int[][] pixels = get2DPixelArray(img);
 
@@ -160,328 +163,7 @@ public class ImageManipulator {
 
         return pixels;
     }
-
-    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to, char property_to_mask_with){
-        final int WHITE = 0x00ffffff;
-        final int BLACK = 0x00000000;
-
-        final int THRESHOLD = otsuThreshold(pixels, property_to_mask_with);
-
-        for(int row = 0; row < pixels.length; row++){
-            for(int col = 0; col < pixels[0].length; col++){
-                int value = getPixelProperty(pixels[row][col], property_to_mask_with);
-
-                if(THRESHOLD < 128){
-                    if(value <= THRESHOLD){
-                        array_to_write_to[row][col] = WHITE;
-                    } else{
-                        array_to_write_to[row][col] = BLACK;
-                    }
-                } else{
-                    if(value >= THRESHOLD){
-                        array_to_write_to[row][col] = WHITE;
-                    } else{
-                        array_to_write_to[row][col] = BLACK;
-                    }
-                }
-            }
-        }
-
-        return array_to_write_to;
-    }
-
-    private static int getPixelProperty(int pixel, char property){
-        return switch (property) {
-            case 'r' -> pixel & 0x000000ff;
-            case 'g' -> (pixel & 0x0000ff00) >> 8;
-            case 'b' -> (pixel & 0x00ff0000) >> 16;
-            case 'l' -> calculateLuminance(pixel);
-            case 'h' -> calculateHue(pixel);
-            default -> pixel;
-        };
-    }
-
-    private static int otsuThreshold(int[][] pixels, char property){
-        final int range = 256;
-        int[] histogram = new int[range];
-        float[] square_variance = new float[range];
-        float weight_background, weight_foreground, mu_background, mu_foreground; 
-        float highest_variance = -1;
-        int highest_variance_index = 0;
-
-        for(int row = 0; row < pixels.length; row++){
-            for(int col = 0; col < pixels[0].length; col++){
-                int value = getPixelProperty(pixels[row][col], property);
-                histogram[value]++;
-            }
-        }
-
-        for(int i = 0; i < histogram.length; i++){
-            weight_background = 0;
-            weight_foreground = 0;
-            mu_background = 0;
-            mu_foreground = 0;
-            int mean_number = 0;
-
-            for(int j = 0; j <= i; j++){
-                weight_background += histogram[i];
-                mu_background += i * histogram[i];
-                mean_number += histogram[i];
-            }
-
-            mu_background /= mean_number;
-            weight_background /= range;
-            mean_number = 0;
-
-            for(int j = i + 1; j < histogram.length; j++){
-                weight_foreground += histogram[i];
-                mu_foreground += i * histogram[i];
-                mean_number += histogram[i];
-            }
-
-            mu_foreground /= mean_number;
-            weight_foreground /= range;
-
-            square_variance[i] = weight_background * weight_foreground * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
-        }
-
-        for(int i = 0; i < square_variance.length; i++){
-            if(square_variance[i] > highest_variance){
-                highest_variance = square_variance[i];
-                highest_variance_index = i;
-            }
-        }
-
-        return highest_variance_index;
-    }
-
-    private static String getManipulationType(Scanner scanner){
-        String[] valid_choices = {"1", "2", "3", "4"};
-        String choice = "";
-        boolean choice_is_valid = false;
-
-        while(!choice_is_valid){
-            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask");
-
-            if(arrayContainsString(valid_choices, choice)){
-                choice_is_valid = true;
-            } else{
-                System.out.println("You must enter the number on the left of each option");
-            }
-        }
-
-        return choice;
-    }
-
-    private static int[][] createMask(BufferedImage img, Scanner scanner){
-        int[][] pixels = get2DPixelArray(img);
-        char property = getMaskingProperty(scanner);
-
-        pixels = createMask2DArray(pixels, pixels, property);
-
-        return pixels;
-    }
-
-    private static char getMaskingProperty(Scanner scanner){
-        char[] valid_choices = {'r', 'g', 'b', 'l', 'h'};
-        String choice = "";
-        boolean choice_is_valid = false;
-
-        while(!choice_is_valid){
-            choice = getString(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue");
-
-            if(choice.length() == 1 && arrayContainsChar(valid_choices, choice.charAt(0))){
-                choice_is_valid = true;
-            } else{
-                System.out.println("You must enter only one of the characters in the brackets.");
-            }
-        }
-
-        return choice.charAt(0);
-    }
-
-    private static boolean arrayContainsChar(char[] array, char target){
-        for(int i = 0; i < array.length; i++){
-            if(array[i] == target){
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static int[][] performBlur(BufferedImage img, Scanner scanner){
-        char blur_type = getBlurType(scanner);
-        int[][] pixels = new int[0][0];
-        int size = 0;
-
-        if(blur_type == 'b'){
-            pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
-        } else if(blur_type == 'g'){
-            while(size < 1 || size > 25){
-                size = getInt(scanner, "Enter a size for the gaussian blur:");
-                
-                if(size >= 1 && size <= 24){
-                    pixels = gaussianBlur(img, size);
-                }
-            }
-            
-        } else{
-            pixels = get2DPixelArray(img);
-            System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
-        }
-
-        return pixels;
-    }
-
-    private static int[][] boxBlur(BufferedImage img, int box_size){
-        int[][] pixels = get2DPixelArray(img);
-        int height = img.getHeight();
-        int width = img.getWidth();
-
-        for(int row = 0; row < height; row++){
-            for(int col = 0; col < width; col++){
-                pixels[row][col] = calculateBoxBlur(pixels, row, col, box_size);
-            }
-        }
-
-        return pixels;
-    }
-
-    private static int[][] gaussianBlur(BufferedImage img, int size){
-        final long[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
-        int[][] pixels = get2DPixelArray(img);
-        final int width = img.getWidth(), height = img.getHeight();
-        
-        for(int row = 0; row < height; row++){
-            for(int col = 0; col < width; col++){
-                pixels[row][col] = calculateGaussianBlur(pixels, row, col, GAUSSIAN_DISTRIBUTION);
-            }
-        }
-
-        return pixels;
-    }
-
-    private static int calculateGaussianBlur(int[][] pixels, int row, int col, long[][] distribution){
-        final int size = (distribution.length - 1) / 2;
-        final int mid_point = size;
-        final int width = pixels[0].length, height = pixels.length;
-        long red = 0, green = 0, blue = 0;
-        int pixel_colour;
-        int total_distribution_weight = 0;
-
-        for(int x = -size; x <= size; x++){
-            for(int y = -size; y <= size; y++){
-                if(row + x >= 0 && row + x < height && col + y >= 0 && col + y < width){
-                    red += (pixels[row + x][col + y] & 0x000000ff) * distribution[mid_point + y][mid_point + x]; 
-                    green += ((pixels[row + x][col + y] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]; 
-                    blue += ((pixels[row + x][col + y] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]; 
-                    total_distribution_weight += distribution[mid_point + y][mid_point + x];
-                }
-            }
-        }
-
-        red /= total_distribution_weight;
-        green /= total_distribution_weight;
-        blue /= total_distribution_weight;
-
-        red &= 0xff;
-        green &= 0xff;
-        blue &= 0xff;
-
-        pixel_colour = (((int) blue) << 16) + (((int) green) << 8) + ((int) red);
-
-        return pixel_colour;
-    }
-
-
-    private static long[][] calculateGaussianDistribution(int size){
-        long[][] distrib = new long[size * 2 + 1][size * 2 + 1];
-        final int mid_point = size;
-
-        for(int y = -size; y <= size; y++){
-            if(mid_point + y - 1 < 0){
-                distrib[mid_point + y][0] = 1;
-            } else if(mid_point + y > mid_point){
-                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] / 2;
-            } else{
-                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] * 2;
-            }
-
-            for(int x = -size + 1; x <= size; x++){
-                if(mid_point + x > mid_point){
-                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] / 2;
-                } else{
-                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] * 2;
-                }
-            }
-        }
-
-        return distrib;
-    }
-
-    private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
-        int red = 0, green = 0, blue = 0, average, pixel_count = 0;
-
-        for(int y = -box_size; y <= box_size; y++){
-            for(int x = -box_size; x <= box_size; x++){
-                if(!(row + y < 0 || row + y >= pixels.length || col + x < 0 || col + x >= pixels[0].length)){
-                    red += pixels[row + y][col + x] & 0x000000ff;
-                    green += (pixels[row + y][col + x] & 0x0000ff00) >> 8;
-                    blue += (pixels[row +y][col + x] & 0x00ff0000) >> 16;
-                    pixel_count++;
-                }
-            }
-        }
-
-        red /= pixel_count;
-        green /= pixel_count;
-        blue /= pixel_count;
-
-        average = (blue << 16) + (green << 8) + red;
-
-        return average;
-    }
-
-    private static char getBlurType(Scanner scanner){
-        String blur = "";
-        boolean is_valid = false;
-
-        while(!is_valid){
-            blur = getString(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur"); //ADD MORE BLUR OPTIONS
-            
-            if(blur.equals("b") || blur.equals("g")){
-                is_valid = true;
-            } else{
-                System.out.println("Enter the character in the brackets to the left of the option.");
-            }
-        }
-
-        return blur.charAt(0);
-    }
-
-    private static int[][] makeGreyscale(BufferedImage img, Scanner scanner){
-        boolean use_luminance = getBoolean(scanner, "Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] {"l", "b"});
-        int[][] pixels = get2DPixelArray(img);
-        int grey;
-        int greyscale_colour;
-
-        for (int[] pixel_row : pixels) {
-            for (int col = 0; col < pixel_row.length; col++) {
-                if(use_luminance){
-                    grey = calculateLuminance(pixel_row[col]);
-                } else{
-                    grey = calculateBrightness(pixel_row[col]);
-                }
-
-                greyscale_colour = (grey << 16) + (grey << 8) + grey;
-                pixel_row[col] = greyscale_colour;
-            }
-        }
-
-        return pixels;
-    }
-
+    
     //returns true if vertical, false if horizontal
     private static boolean getSortDirection(Scanner scanner){
         String input = "";
@@ -559,32 +241,6 @@ public class ImageManipulator {
         return result;
     }
 
-    //returns true if the left pixel's property is greater than the right pixel's
-    private static boolean comparePixelProperty(int left_pixel, int right_pixel, char property){
-        int mask;
-
-        mask = switch (property) {
-            case 'b' -> 0x00ff0000;
-            case 'g' -> 0x0000ff00;
-            case 'r' -> 0x000000ff;
-            default ->  0xffffffff; //this is for grey_scale and overall comparison
-        };
-
-        if(property == 'l'){
-            int left_luminance, right_luminance;
-
-            left_luminance = calculateLuminance(left_pixel);
-            right_luminance = calculateLuminance(right_pixel);
-
-            return left_luminance > right_luminance;
-        } else if(property == 'h'){
-            return calculateHue(left_pixel) > calculateHue(right_pixel);
-        } else{
-            return (left_pixel & mask) > (right_pixel & mask);
-        }
-
-    }
-
     private static char getColourToSortBy(Scanner scanner){
         String colour = "";
         boolean valid_colour = false;
@@ -600,6 +256,223 @@ public class ImageManipulator {
         }
 
         return colour.charAt(0);
+    }
+
+
+    //#endregion
+    
+    //Greyscale methods
+    //#region
+
+    private static int[][] makeGreyscale(BufferedImage img, Scanner scanner){
+        boolean use_luminance = getBoolean(scanner, "Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] {"l", "b"});
+        int[][] pixels = get2DPixelArray(img);
+        int grey;
+        int greyscale_colour;
+
+        for (int[] pixel_row : pixels) {
+            for (int col = 0; col < pixel_row.length; col++) {
+                if(use_luminance){
+                    grey = calculateLuminance(pixel_row[col]);
+                } else{
+                    grey = calculateBrightness(pixel_row[col]);
+                }
+
+                greyscale_colour = (grey << 16) + (grey << 8) + grey;
+                pixel_row[col] = greyscale_colour;
+            }
+        }
+
+        return pixels;
+    }
+
+    //#endregion
+
+    //Blur methods
+    //#region
+
+    private static int[][] performBlur(BufferedImage img, Scanner scanner){
+        char blur_type = getBlurType(scanner);
+        int[][] pixels = new int[0][0];
+        int size = 0;
+
+        if(blur_type == 'b'){
+            pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
+        } else if(blur_type == 'g'){
+            while(size < 1 || size > 25){
+                size = getInt(scanner, "Enter a size for the gaussian blur:");
+                
+                if(size >= 1 && size <= 24){
+                    pixels = gaussianBlur(img, size);
+                }
+            }
+            
+        } else{
+            pixels = get2DPixelArray(img);
+            System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
+        }
+
+        return pixels;
+    }
+
+    private static int[][] boxBlur(BufferedImage img, int box_size){
+        int[][] pixels = get2DPixelArray(img);
+        int height = img.getHeight();
+        int width = img.getWidth();
+
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                pixels[row][col] = calculateBoxBlur(pixels, row, col, box_size);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int[][] gaussianBlur(BufferedImage img, int size){
+        final long[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
+        int[][] pixels = get2DPixelArray(img);
+        final int width = img.getWidth(), height = img.getHeight();
+        
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                pixels[row][col] = calculateGaussianBlur(pixels, row, col, GAUSSIAN_DISTRIBUTION);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int calculateGaussianBlur(int[][] pixels, int row, int col, long[][] distribution){
+        final int size = (distribution.length - 1) / 2;
+        final int mid_point = size;
+        final int width = pixels[0].length, height = pixels.length;
+        long red = 0, green = 0, blue = 0;
+        int pixel_colour;
+        int total_distribution_weight = 0;
+
+        for(int x = -size; x <= size; x++){
+            for(int y = -size; y <= size; y++){
+                if(row + x >= 0 && row + x < height && col + y >= 0 && col + y < width){
+                    red += (pixels[row + x][col + y] & 0x000000ff) * distribution[mid_point + y][mid_point + x]; 
+                    green += ((pixels[row + x][col + y] & 0x0000ff00) >>> 8) * distribution[mid_point + y][mid_point + x]; 
+                    blue += ((pixels[row + x][col + y] & 0x00ff0000) >>> 16) * distribution[mid_point + y][mid_point + x]; 
+                    total_distribution_weight += distribution[mid_point + y][mid_point + x];
+                }
+            }
+        }
+
+        red /= total_distribution_weight;
+        green /= total_distribution_weight;
+        blue /= total_distribution_weight;
+
+        red &= 0xff;
+        green &= 0xff;
+        blue &= 0xff;
+
+        pixel_colour = (((int) blue) << 16) + (((int) green) << 8) + ((int) red);
+
+        return pixel_colour;
+    }
+
+
+    private static long[][] calculateGaussianDistribution(int size){
+        long[][] distrib = new long[size * 2 + 1][size * 2 + 1];
+        final int mid_point = size;
+
+        for(int y = -size; y <= size; y++){
+            if(mid_point + y - 1 < 0){
+                distrib[mid_point + y][0] = 1;
+            } else if(mid_point + y > mid_point){
+                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] / 2;
+            } else{
+                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] * 2;
+            }
+
+            for(int x = -size + 1; x <= size; x++){
+                if(mid_point + x > mid_point){
+                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] / 2;
+                } else{
+                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] * 2;
+                }
+            }
+        }
+
+        return distrib;
+    }
+
+    private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
+        int red = 0, green = 0, blue = 0, average, pixel_count = 0;
+
+        for(int y = -box_size; y <= box_size; y++){
+            for(int x = -box_size; x <= box_size; x++){
+                if(!(row + y < 0 || row + y >= pixels.length || col + x < 0 || col + x >= pixels[0].length)){
+                    red += pixels[row + y][col + x] & 0x000000ff;
+                    green += (pixels[row + y][col + x] & 0x0000ff00) >>> 8;
+                    blue += (pixels[row +y][col + x] & 0x00ff0000) >>> 16;
+                    pixel_count++;
+                }
+            }
+        }
+
+        red /= pixel_count;
+        green /= pixel_count;
+        blue /= pixel_count;
+
+        average = (blue << 16) + (green << 8) + red;
+
+        return average;
+    }
+
+    private static char getBlurType(Scanner scanner){
+        String blur = "";
+        boolean is_valid = false;
+
+        while(!is_valid){
+            blur = getString(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur"); //ADD MORE BLUR OPTIONS
+            
+            if(blur.equals("b") || blur.equals("g")){
+                is_valid = true;
+            } else{
+                System.out.println("Enter the character in the brackets to the left of the option.");
+            }
+        }
+
+        return blur.charAt(0);
+    }
+
+    //#endregion
+
+    //Masking methods
+    //#region
+
+    private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to, char property_to_mask_with){
+        final int WHITE = 0xffffffff; //left most 0xff000000 is so that the image is not transparent
+        final int BLACK = 0xff000000;
+
+        final int THRESHOLD = otsuThreshold(pixels, property_to_mask_with);
+
+        for(int row = 0; row < pixels.length; row++){
+            for(int col = 0; col < pixels[0].length; col++){
+                int value = getPixelProperty(pixels[row][col], property_to_mask_with);
+
+                if(THRESHOLD < 128){
+                    if(value <= THRESHOLD){
+                        array_to_write_to[row][col] = WHITE;
+                    } else{
+                        array_to_write_to[row][col] = BLACK;
+                    }
+                } else{
+                    if(value >= THRESHOLD){
+                        array_to_write_to[row][col] = WHITE;
+                    } else{
+                        array_to_write_to[row][col] = BLACK;
+                    }
+                }
+            }
+        }
+
+        return array_to_write_to;
     }
 
     private static boolean useMask(Scanner scanner){
@@ -620,9 +493,107 @@ public class ImageManipulator {
         return response.equals("y");
     }
 
-    // GENERIC METHODS
-    // get2DPixelArray, getString, getInt, createImage, getImageFile, saveImageFile, checkIfInt, calculateLuminance, arrayContainsString
+    private static int otsuThreshold(int[][] pixels, char property){
+        final int range = 256;
+        int[] histogram = new int[range];
+        float[] square_variance = new float[range];
+        float weight_background, weight_foreground, mu_background, mu_foreground; 
+        float highest_variance = -1;
+        int highest_variance_index = 0;
+
+        for(int row = 0; row < pixels.length; row++){
+            for(int col = 0; col < pixels[0].length; col++){
+                int value = getPixelProperty(pixels[row][col], property);
+                histogram[value]++;
+            }
+        }
+
+        for(int i = 0; i < histogram.length; i++){
+            weight_background = 0;
+            weight_foreground = 0;
+            mu_background = 0;
+            mu_foreground = 0;
+            int mean_number = 0;
+
+            for(int j = 0; j <= i; j++){
+                weight_background += histogram[i];
+                mu_background += i * histogram[i];
+                mean_number += histogram[i];
+            }
+
+            mu_background /= mean_number;
+            weight_background /= range;
+            mean_number = 0;
+
+            for(int j = i + 1; j < histogram.length; j++){
+                weight_foreground += histogram[i];
+                mu_foreground += i * histogram[i];
+                mean_number += histogram[i];
+            }
+
+            mu_foreground /= mean_number;
+            weight_foreground /= range;
+
+            square_variance[i] = weight_background * weight_foreground * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
+        }
+
+        for(int i = 0; i < square_variance.length; i++){
+            if(square_variance[i] > highest_variance){
+                highest_variance = square_variance[i];
+                highest_variance_index = i;
+            }
+        }
+
+        return highest_variance_index;
+    }
+
+    private static int[][] createMask(BufferedImage img, Scanner scanner){
+        int[][] pixels = get2DPixelArray(img);
+        char property = getMaskingProperty(scanner);
+
+        pixels = createMask2DArray(pixels, pixels, property);
+
+        return pixels;
+    }
+
+    private static char getMaskingProperty(Scanner scanner){
+        char[] valid_choices = {'r', 'g', 'b', 'l', 'h'};
+        String choice = "";
+        boolean choice_is_valid = false;
+
+        while(!choice_is_valid){
+            choice = getString(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue");
+
+            if(choice.length() == 1 && arrayContainsChar(valid_choices, choice.charAt(0))){
+                choice_is_valid = true;
+            } else{
+                System.out.println("You must enter only one of the characters in the brackets.");
+            }
+        }
+
+        return choice.charAt(0);
+    }
+
+    //#endregion
+
+    //Edge detection methods
     //#region
+
+    //#endregion
+
+    // GENERIC METHODS
+    //#region
+
+    private static int getPixelProperty(int pixel, char property){
+        return switch (property) {
+            case 'r' -> pixel & 0x000000ff;
+            case 'g' -> (pixel & 0x0000ff00) >>> 8;
+            case 'b' -> (pixel & 0x00ff0000) >>> 16;
+            case 'l' -> calculateLuminance(pixel);
+            case 'h' -> calculateHue(pixel);
+            default -> pixel;
+        };
+    }
 
     private static int[][] get2DPixelArray(BufferedImage img){
         Raster image_raster = img.getData();
@@ -643,6 +614,8 @@ public class ImageManipulator {
                 } else{ //bgr
                     pixels[row][col] = (temp[2] << 16) + (temp[1] << 8) + temp[0];
                 }
+
+                pixels[row][col] &= 0xffffffff;
             }
         }
 
@@ -659,11 +632,11 @@ public class ImageManipulator {
         for(int row = 0; row < height; row++){
             for(int col = 0; col < width; col++){
                 temp[0] = (sorted_pixels[row][col] & 0x000000ff);
-                temp[1] = (sorted_pixels[row][col] & 0x0000ff00) >> 8;
-                temp[2] = (sorted_pixels[row][col] & 0x00ff0000) >> 16;
+                temp[1] = (sorted_pixels[row][col] & 0x0000ff00) >>> 8;
+                temp[2] = (sorted_pixels[row][col] & 0x00ff0000) >>> 16;
 
                 if(values_per_pixel == 4){
-                    temp[3] = (sorted_pixels[row][col] & 0xff000000) >> 24;
+                    temp[3] = (sorted_pixels[row][col] & 0xff000000) >>> 24;
                 }
 
                 raster.setPixel(col, row, temp);
@@ -676,8 +649,8 @@ public class ImageManipulator {
     private static int calculateBrightness(int abgr){
         int red, green, blue;
         red = abgr & 0x000000FF;
-        green = (abgr & 0x0000FF00) >> 8;
-        blue = (abgr & 0x00FF0000) >> 16;
+        green = (abgr & 0x0000FF00) >>> 8;
+        blue = (abgr & 0x00FF0000) >>> 16;
         
         return (red + green + blue) / 3;
     }
@@ -689,8 +662,8 @@ public class ImageManipulator {
         int blue_coefficient = (int) Math.round(0.0722 * 255);
         
         red = abgr & 0x000000FF;
-        green = (abgr & 0x0000FF00) >> 8;
-        blue = (abgr & 0x00FF0000) >> 16;
+        green = (abgr & 0x0000FF00) >>> 8;
+        blue = (abgr & 0x00FF0000) >>> 16;
 
         return (red * red_coefficient + green * green_coefficient + blue * blue_coefficient) / 255;
     }
@@ -818,8 +791,8 @@ public class ImageManipulator {
         double hue = 0;
 
         red = (double) (abgr & 0x000000ff) / 256.0d;
-        green = (double) ((abgr & 0x0000ff00) >> 8) / 256.0d;
-        blue = (double) ((abgr & 0x00ff0000) >> 16) / 256.0d;
+        green = (double) ((abgr & 0x0000ff00) >>> 8) / 256.0d;
+        blue = (double) ((abgr & 0x00ff0000) >>> 16) / 256.0d;
 
         max = Math.max(Math.max(red, green), blue);
         min = Math.min(Math.min(red, green), blue);
@@ -837,6 +810,53 @@ public class ImageManipulator {
         }
 
         return (int) (hue * (17.0d / 24.0d)); // scales hue from 0-360 to 0-255
+    }
+
+    //returns true if the left pixel's property is greater than the right pixel's
+    private static boolean comparePixelProperty(int left_pixel, int right_pixel, char property){
+       int mask;
+
+       mask = switch (property) {
+           case 'b' -> 0x00ff0000;
+           case 'g' -> 0x0000ff00;
+           case 'r' -> 0x000000ff;
+           default ->  0xffffffff; //this is for grey_scale and overall comparison
+       };
+
+        return switch (property) {
+            case 'l' -> calculateLuminance(left_pixel) > calculateLuminance(right_pixel);
+            case 'h' -> calculateHue(left_pixel) > calculateHue(right_pixel);
+            default -> (left_pixel & mask) > (right_pixel & mask);
+        };
+
+    }
+
+    private static String getManipulationType(Scanner scanner){
+        String[] valid_choices = {"1", "2", "3", "4"};
+        String choice = "";
+        boolean choice_is_valid = false;
+
+        while(!choice_is_valid){
+            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask");
+
+            if(arrayContainsString(valid_choices, choice)){
+                choice_is_valid = true;
+            } else{
+                System.out.println("You must enter the number on the left of each option");
+            }
+        }
+
+        return choice;
+    }
+
+    private static boolean arrayContainsChar(char[] array, char target){
+        for(int i = 0; i < array.length; i++){
+            if(array[i] == target){
+                return true;
+            }
+        }
+
+        return false;
     }
 
     //#endregion
