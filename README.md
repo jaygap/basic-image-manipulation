@@ -3,6 +3,9 @@
 ## Plans
 - Add option to choose to sort by ascending or descending
 - Add edge-detection option
+    - Canny
+    - Kovalevsky
+    - Sobel operator
 - Add resizing option (up and down)
     - Nearest-neigbour
     - Box sampling
@@ -15,6 +18,7 @@
 ## Known Bugs / Issues
 - Box blur is VERY slow for larger box sizes (not a priority to fix)
 - Gaussian blur also slow
+- Hue masking results in very blocky textures for some reason
 
 ## Features:
 - Horizontal and vertical pixel sorting (with mask and no mask)

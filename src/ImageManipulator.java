@@ -312,12 +312,20 @@ public class ImageManipulator {
 
     private static int[][] performBlur(BufferedImage img, Scanner scanner){
         char blur_type = getBlurType(scanner);
-        int[][] pixels;
+        int[][] pixels = new int[0][0];
+        int size = 0;
 
         if(blur_type == 'b'){
             pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
         } else if(blur_type == 'g'){
-            pixels = gaussianBlur(img, getInt(scanner, "Enter a size for the gaussian blur: (blur is significantly less noticeable even at larger sizes)"));
+            while(size < 1 || size > 25){
+                size = getInt(scanner, "Enter a size for the gaussian blur:");
+                
+                if(size >= 1 && size <= 24){
+                    pixels = gaussianBlur(img, size);
+                }
+            }
+            
         } else{
             pixels = get2DPixelArray(img);
             System.out.println("Failed to blur image because an invalid blur type was given (somehow).");
@@ -341,7 +349,7 @@ public class ImageManipulator {
     }
 
     private static int[][] gaussianBlur(BufferedImage img, int size){
-        final double[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
+        final long[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
         int[][] pixels = get2DPixelArray(img);
         final int width = img.getWidth(), height = img.getHeight();
         
@@ -351,63 +359,65 @@ public class ImageManipulator {
             }
         }
 
-       System.out.println("complete");
-        
         return pixels;
     }
 
-    private static int calculateGaussianBlur(int[][] pixels, int row, int col, double[][] distribution){
+    private static int calculateGaussianBlur(int[][] pixels, int row, int col, long[][] distribution){
         final int size = (distribution.length - 1) / 2;
         final int mid_point = size;
         final int width = pixels[0].length, height = pixels.length;
-        double red = 0, green = 0, blue = 0;
+        long red = 0, green = 0, blue = 0;
         int pixel_colour;
+        int total_distribution_weight = 0;
 
         for(int x = -size; x <= size; x++){
             for(int y = -size; y <= size; y++){
-                red += (pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x000000ff) * distribution[mid_point + y][mid_point + x]; 
-                green += ((pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]; 
-                blue += ((pixels[getTrueIndex(row, x, height)][getTrueIndex(col, y, width)] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]; 
+                if(row + x >= 0 && row + x < height && col + y >= 0 && col + y < width){
+                    red += (pixels[row + x][col + y] & 0x000000ff) * distribution[mid_point + y][mid_point + x]; 
+                    green += ((pixels[row + x][col + y] & 0x0000ff00) >> 8) * distribution[mid_point + y][mid_point + x]; 
+                    blue += ((pixels[row + x][col + y] & 0x00ff0000) >> 16) * distribution[mid_point + y][mid_point + x]; 
+                    total_distribution_weight += distribution[mid_point + y][mid_point + x];
+                }
             }
         }
+
+        red /= total_distribution_weight;
+        green /= total_distribution_weight;
+        blue /= total_distribution_weight;
+
+        red &= 0xff;
+        green &= 0xff;
+        blue &= 0xff;
 
         pixel_colour = (((int) blue) << 16) + (((int) green) << 8) + ((int) red);
 
         return pixel_colour;
     }
 
-    private static int getTrueIndex(int position, int offset, int upper_bound){
-        if(position + offset < 0){
-            return upper_bound + (position + offset);
-        }
 
-        return (position + offset) % upper_bound;
-    }
-
-    private static double[][] calculateGaussianDistribution(int size){
-        final double STANDARD_DEVIATION = (double) size / (Math.sqrt((double) size));
+    private static long[][] calculateGaussianDistribution(int size){
+        long[][] distrib = new long[size * 2 + 1][size * 2 + 1];
         final int mid_point = size;
-        double sum = 0;
-        double[][] distrib = new double[size * 2 + 1][size * 2 + 1];
 
         for(int y = -size; y <= size; y++){
-            for(int x = -size; x <= size; x++){
-                distrib[mid_point + y][mid_point + x] = gaussianEquation(STANDARD_DEVIATION, x, y);
-                sum += distrib[mid_point + y][mid_point + x]; 
+            if(mid_point + y - 1 < 0){
+                distrib[mid_point + y][0] = 1;
+            } else if(mid_point + y > mid_point){
+                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] / 2;
+            } else{
+                distrib[mid_point + y][0] = distrib[mid_point + y - 1][0] * 2;
             }
-        }
 
-        for(int y = -size; y <= size; y++){
-            for(int x = -size; x <= size; x++){
-                distrib[mid_point + y][mid_point + x] /= sum;
+            for(int x = -size + 1; x <= size; x++){
+                if(mid_point + x > mid_point){
+                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] / 2;
+                } else{
+                    distrib[mid_point + y][mid_point + x] = distrib[mid_point + y][mid_point + x - 1] * 2;
+                }
             }
         }
 
         return distrib;
-    }
-
-    private static double gaussianEquation(double standard_deviation, int x, int y){
-        return (1.0d / (2.0d * Math.PI * standard_deviation * standard_deviation)) * Math.exp(- ((x * x) + (y * y)) / (2.0d * standard_deviation * standard_deviation));
     }
 
     private static int calculateBoxBlur(int[][] pixels, int row, int col,int box_size){
