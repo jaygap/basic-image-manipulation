@@ -1,11 +1,9 @@
 # Basic Image Manipulation
 
 ## Plans
-- Add option to choose to sort by ascending or descending
 - Add edge-detection option
     - Canny
     - Kovalevsky
-    - Sobel operator
 - Add resizing option (up and down)
     - Nearest-neigbour
     - Box sampling
@@ -21,9 +19,16 @@
 - Hue masking results in very blocky textures for some reason
 
 ## Features:
-- Horizontal and vertical pixel sorting (with mask and no mask)
-- Box blur of variable sized boxes
+- Pixel sorting options:
+    - Horizontal and vertical
+    - Ascending and descending
+    - Sort by red, green, blue, luminance and hue
+    - Sort according to a mask
+        - Based off red, green, blue, luminance or hue
+- Blur types:
+    - Box
+    - Gaussian
 - Make an image greyscale based off luminance and brightness
 - Make a mask of an image with automatically calculated thresholds (Otsu's method) 
     - Supports luminance and rgb (each component separately)
-- Gaussian blur
+- Edge detection

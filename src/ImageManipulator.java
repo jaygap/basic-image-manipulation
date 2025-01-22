@@ -24,6 +24,7 @@ public class ImageManipulator {
             case "2" -> pixel_array = makeGreyscale(img, scanner);
             case "3" -> pixel_array = performBlur(img, scanner);
             case "4" -> pixel_array = createMask(img, scanner);
+            case "5" -> pixel_array = detectEdges(img, scanner);
             default -> {
             }
         }
@@ -43,7 +44,8 @@ public class ImageManipulator {
         int height = img.getHeight(), width = img.getWidth(); 
 
         boolean use_mask;
-        char sorting_property = getColourToSortBy(scanner);
+        char sorting_property = getCharLimited(scanner, "What colour should the pixels be sorted by? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue", new char[]{'r', 'g', 'b', 'l', 'h'});
+        char sort_order = getCharLimited(scanner, "Sort in (a)scending or (d)escending?", new char[]{'a', 'd'});
         boolean sort_vertical;
 
         sort_vertical = getSortDirection(scanner);  
@@ -53,18 +55,25 @@ public class ImageManipulator {
 
         if(use_mask){
             int[][] mask_of_pixels = new int[pixels.length][pixels[0].length];
-            char masking_property = getMaskingProperty(scanner);
-            mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, masking_property);
 
-            pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_vertical);
+            boolean use_edge_detection = getBoolean(scanner, "Would you like to use an edge detection algorithm to generate a mask? (y/n)", new String[]{"y", "n"});
+
+            if(use_edge_detection){
+                mask_of_pixels = detectEdges(img, scanner);
+            } else{
+                char masking_property = getCharLimited(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue", new char[]{'r', 'g', 'b', 'l', 'h'});
+                mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, masking_property);
+            }
+            
+            pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_order, sort_vertical);
         } else{
-            pixels = sortPixelWihtoutMask(pixels, height, width, sorting_property, sort_vertical);
+            pixels = sortPixelWihtoutMask(pixels, height, width, sorting_property, sort_order, sort_vertical);
         }
 
         return pixels;
     }
 
-    private static int[][] sortPixelWihtoutMask(int[][] pixels, int height, int width, char sorting_property,boolean sort_vertical){
+    private static int[][] sortPixelWihtoutMask(int[][] pixels, int height, int width, char sorting_property, char sort_order, boolean sort_vertical){
         int[] temp_array;
 
         if(sort_vertical){
@@ -75,7 +84,7 @@ public class ImageManipulator {
                     temp_array[row] = pixels[row][col];
                 }
 
-                temp_array = mergeSortPixels(temp_array, sorting_property);
+                temp_array = mergeSortPixels(temp_array, sorting_property, sort_order);
 
                 for(int row = 0; row < height; row++){
                     pixels[row][col] = temp_array[row];
@@ -85,7 +94,7 @@ public class ImageManipulator {
             for(int row = 0; row < height; row++){
                 temp_array = pixels[row];
 
-                temp_array = mergeSortPixels(temp_array, sorting_property);
+                temp_array = mergeSortPixels(temp_array, sorting_property, sort_order);
 
                 System.arraycopy(temp_array, 0, pixels[row], 0, width);
             }
@@ -94,12 +103,12 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static int[][] sortPixelWithMask(int[][] pixels, int[][] mask, int height, int width, char sorting_property, boolean sort_vertical){
+    private static int[][] sortPixelWithMask(int[][] pixels, int[][] mask, int height, int width, char sorting_property, char sort_order, boolean sort_vertical){
         int[] temp_array;
         int starting_pos;
         int length;
-        final int WHITE = 0x00ffffff;
-        final int BLACK = 0x00000000;
+        final int WHITE = 0xffffffff;
+        final int BLACK = 0xff000000;
 
         if(sort_vertical){
             for(int col = 0; col < width; col++){
@@ -119,7 +128,7 @@ public class ImageManipulator {
                             temp_array[i] = pixels[starting_pos + i][col];
                         }
 
-                        temp_array = mergeSortPixels(temp_array, sorting_property);
+                        temp_array = mergeSortPixels(temp_array, sorting_property, sort_order);
 
                         for(int i = 0; i < length; i++){
                             pixels[starting_pos + i][col] = temp_array[i];
@@ -148,7 +157,7 @@ public class ImageManipulator {
                             temp_array[i] = pixels[row][starting_pos + i];
                         }
 
-                        temp_array = mergeSortPixels(temp_array, sorting_property);
+                        temp_array = mergeSortPixels(temp_array, sorting_property, sort_order);
 
                         for(int i = 0; i < length; i++){
                             pixels[row][starting_pos + i] = temp_array[i];
@@ -184,7 +193,7 @@ public class ImageManipulator {
         return !input.equals("h");
     }
 
-    private static int[] mergeSortPixels(int[] pixels, char colour_to_sort_by){
+    private static int[] mergeSortPixels(int[] pixels, char colour_to_sort_by, char sort_order){
         if(pixels.length == 1){
             return pixels;
         }
@@ -201,21 +210,21 @@ public class ImageManipulator {
             right[i - mid] = pixels[i];
         }
 
-        left = mergeSortPixels(left, colour_to_sort_by);
-        right = mergeSortPixels(right, colour_to_sort_by);
+        left = mergeSortPixels(left, colour_to_sort_by, sort_order);
+        right = mergeSortPixels(right, colour_to_sort_by, sort_order);
 
-        pixels = mergePixelArrays(left, right, colour_to_sort_by);
+        pixels = mergePixelArrays(left, right, colour_to_sort_by, sort_order);
 
         return pixels;
     }
 
     //change this so that instead of taking in a mask it takes in the colour and then write another method that does comparison so we can compare colours + brightness + luminance
-    private static int[] mergePixelArrays(int[] left, int[] right, char mask_type){
+    private static int[] mergePixelArrays(int[] left, int[] right, char mask_type, char sort_order){
         int left_pointer = 0, right_pointer = 0, result_pointer = 0;
         int[] result = new int[left.length + right.length];
 
         while(left_pointer < left.length && right_pointer < right.length){
-            if(comparePixelProperty(left[left_pointer], right[right_pointer], mask_type)){
+            if(comparePixelProperty((sort_order == 'a' ? 1 : -1) * left[left_pointer], (sort_order == 'a' ? 1 : -1) * right[right_pointer], mask_type)){
                 result[result_pointer] = right[right_pointer];
                 result_pointer++;
                 right_pointer++;
@@ -240,24 +249,6 @@ public class ImageManipulator {
 
         return result;
     }
-
-    private static char getColourToSortBy(Scanner scanner){
-        String colour = "";
-        boolean valid_colour = false;
-
-        while(!valid_colour){
-            colour = getString(scanner, "What colour should the pixels be sorted by? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue");
-
-            if(colour.equals("r") || colour.equals("g") || colour.equals("b") || colour.equals("l") || colour.equals("h")){
-                valid_colour = true;
-            } else{
-                System.out.println("You must enter either \"r\", \"g\", \"b\", \"l\", or \"h\".");
-            }
-        }
-
-        return colour.charAt(0);
-    }
-
 
     //#endregion
     
@@ -292,7 +283,7 @@ public class ImageManipulator {
     //#region
 
     private static int[][] performBlur(BufferedImage img, Scanner scanner){
-        char blur_type = getBlurType(scanner);
+        char blur_type = getCharLimited(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur", new char[]{'b', 'g'});
         int[][] pixels = new int[0][0];
         int size = 0;
 
@@ -300,9 +291,9 @@ public class ImageManipulator {
             pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
         } else if(blur_type == 'g'){
             while(size < 1 || size > 25){
-                size = getInt(scanner, "Enter a size for the gaussian blur:");
+                size = getInt(scanner, "Enter a size for the gaussian blur (max 15):");
                 
-                if(size >= 1 && size <= 24){
+                if(size >= 1 && size <= 15){
                     pixels = gaussianBlur(img, size);
                 }
             }
@@ -424,23 +415,6 @@ public class ImageManipulator {
         return average;
     }
 
-    private static char getBlurType(Scanner scanner){
-        String blur = "";
-        boolean is_valid = false;
-
-        while(!is_valid){
-            blur = getString(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur"); //ADD MORE BLUR OPTIONS
-            
-            if(blur.equals("b") || blur.equals("g")){
-                is_valid = true;
-            } else{
-                System.out.println("Enter the character in the brackets to the left of the option.");
-            }
-        }
-
-        return blur.charAt(0);
-    }
-
     //#endregion
 
     //Masking methods
@@ -549,29 +523,11 @@ public class ImageManipulator {
 
     private static int[][] createMask(BufferedImage img, Scanner scanner){
         int[][] pixels = get2DPixelArray(img);
-        char property = getMaskingProperty(scanner);
+        char property = getCharLimited(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue", new char[]{'r', 'g', 'b', 'l', 'h'});
 
         pixels = createMask2DArray(pixels, pixels, property);
 
         return pixels;
-    }
-
-    private static char getMaskingProperty(Scanner scanner){
-        char[] valid_choices = {'r', 'g', 'b', 'l', 'h'};
-        String choice = "";
-        boolean choice_is_valid = false;
-
-        while(!choice_is_valid){
-            choice = getString(scanner, "What property should the masking be based on? (r)ed, (g)reen, (b)lue, (l)uminance, (h)ue");
-
-            if(choice.length() == 1 && arrayContainsChar(valid_choices, choice.charAt(0))){
-                choice_is_valid = true;
-            } else{
-                System.out.println("You must enter only one of the characters in the brackets.");
-            }
-        }
-
-        return choice.charAt(0);
     }
 
     //#endregion
@@ -579,10 +535,127 @@ public class ImageManipulator {
     //Edge detection methods
     //#region
 
+    private static int[][] detectEdges(BufferedImage img, Scanner scanner){
+        int[][] pixels = get2DPixelArray(img);
+
+        char detection_type = getCharLimited(scanner, "Enter the type of edge detection you wish to perform: (s)obel", new char[]{'s'}); 
+
+        pixels = switch(detection_type){
+            case 's' -> sobelEdgeDetection(pixels, scanner);
+            default -> pixels;
+        };
+
+        return pixels;
+    }
+
+    private static int[][] sobelEdgeDetection(int[][] pixels, Scanner scanner){
+        final int WHITE = 0xffffffff;
+        final int BLACK = 0xff000000;
+
+        final int[][] horizontal_kernel = new int[][] { {-1, 0, 1}, 
+                                                        {-2, 0, 2}, 
+                                                        {-1, 0, 1}};
+
+        final int[][] vertical_kernel = new int[][] {   {1, 2, 1}, 
+                                                        {0, 0, 0}, 
+                                                        {-1, -2, -1}};
+
+        char direction = getCharLimited(scanner, "Do you want to use the sobel operator (h)orizontally, (v)ertically, or (b)oth", new char[]{'h', 'v', 'b'});
+
+        int[][] weights = new int[pixels.length][pixels[0].length];
+        final int width = pixels[0].length, height = pixels.length;
+        int sum = 0;
+        int temp_value;
+        int threshold;
+
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                if(direction == 'h'){
+                    temp_value = calculateSobelWeight(horizontal_kernel, pixels, row, col);
+
+                    weights[row][col] += temp_value;
+                    sum += temp_value;
+                } else if(direction == 'v'){
+                    temp_value = calculateSobelWeight(vertical_kernel, pixels, row, col);
+
+                    weights[row][col] += temp_value;
+                    sum += temp_value;
+                } else if(direction == 'b'){
+                    // temp = sqrt(x * x + y * y);
+                    temp_value = (int) Math.round(Math.sqrt(Math.pow((double)calculateSobelWeight(vertical_kernel, pixels, row, col), 2.0d) + Math.pow((double)calculateSobelWeight(horizontal_kernel, pixels, row, col), 2.0d)));
+
+                    weights[row][col] += temp_value;
+                    sum += temp_value;
+                }
+            }
+        }
+
+        threshold = sum / (width * height);
+
+        for(int row = 0; row < height; row++){
+            for(int col = 0; col < width; col++){
+                if(weights[row][col] < threshold){
+                    pixels[row][col] = WHITE;
+                } else{
+                    pixels[row][col] = BLACK;
+                }
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int calculateSobelWeight(int[][] kernel, int[][] pixels, int row, int col){
+        int weight = 0;
+        final int midpoint = 1;
+        final int size = 1;
+
+        for(int y = -size; y <= size; y++){
+            for(int x = -size; x <= size; x++){
+                if(row + y >= 0 && row + y < pixels.length && col + x >= 0 && col + x < pixels[0].length){
+                    weight += calculateLuminance(pixels[row + y][col + x]) * kernel[midpoint + y][midpoint + x];   
+                }
+            }
+        }
+        
+        return weight;
+    }
+
     //#endregion
 
     // GENERIC METHODS
     //#region
+
+    private static char getCharLimited(Scanner scanner, String message, char[] valid_chars){
+        char response = ' ';
+
+        while(!arrayContainsChar(valid_chars, response)){
+            response = getChar(scanner, message);
+
+            if(!arrayContainsChar(valid_chars, response)){
+                System.out.println("You must enter one of the characters in the brackets.");
+            }
+        }
+
+        return response;
+    }
+
+    private static char getChar(Scanner scanner, String message){
+        String response = "";
+        boolean valid_response = false;
+
+        while(!valid_response){
+            response = getString(scanner, message);
+
+            if(response.length() == 1){
+                valid_response = true;
+            } else{
+                System.out.println("You must enter a single character.");
+            }
+        }
+
+        return response.charAt(0);   
+    }
 
     private static int getPixelProperty(int pixel, char property){
         return switch (property) {
@@ -832,12 +905,12 @@ public class ImageManipulator {
     }
 
     private static String getManipulationType(Scanner scanner){
-        String[] valid_choices = {"1", "2", "3", "4"};
+        String[] valid_choices = {"1", "2", "3", "4", "5"};
         String choice = "";
         boolean choice_is_valid = false;
 
         while(!choice_is_valid){
-            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask");
+            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask, (5) Edge Detection");
 
             if(arrayContainsString(valid_choices, choice)){
                 choice_is_valid = true;
