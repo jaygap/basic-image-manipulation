@@ -541,14 +541,14 @@ public class ImageManipulator {
         char detection_type = getCharLimited(scanner, "Enter the type of edge detection you wish to perform: (s)obel", new char[]{'s'}); 
 
         pixels = switch(detection_type){
-            case 's' -> sobelEdgeDetection(pixels, scanner);
+            case 's' -> sobelEdgeDetection(pixels);
             default -> pixels;
         };
 
         return pixels;
     }
 
-    private static int[][] sobelEdgeDetection(int[][] pixels, Scanner scanner){
+    private static int[][] sobelEdgeDetection(int[][] pixels){
         final int WHITE = 0xffffffff;
         final int BLACK = 0xff000000;
 
@@ -560,8 +560,6 @@ public class ImageManipulator {
                                                         {0, 0, 0}, 
                                                         {-1, -2, -1}};
 
-        char direction = getCharLimited(scanner, "Do you want to use the sobel operator (h)orizontally, (v)ertically, or (b)oth", new char[]{'h', 'v', 'b'});
-
         int[][] weights = new int[pixels.length][pixels[0].length];
         final int width = pixels[0].length, height = pixels.length;
         int sum = 0;
@@ -570,23 +568,11 @@ public class ImageManipulator {
 
         for(int row = 0; row < height; row++){
             for(int col = 0; col < width; col++){
-                if(direction == 'h'){
-                    temp_value = calculateSobelWeight(horizontal_kernel, pixels, row, col);
-
-                    weights[row][col] += temp_value;
-                    sum += temp_value;
-                } else if(direction == 'v'){
-                    temp_value = calculateSobelWeight(vertical_kernel, pixels, row, col);
-
-                    weights[row][col] += temp_value;
-                    sum += temp_value;
-                } else if(direction == 'b'){
-                    // temp = sqrt(x * x + y * y);
-                    temp_value = (int) Math.round(Math.sqrt(Math.pow((double)calculateSobelWeight(vertical_kernel, pixels, row, col), 2.0d) + Math.pow((double)calculateSobelWeight(horizontal_kernel, pixels, row, col), 2.0d)));
-
-                    weights[row][col] += temp_value;
-                    sum += temp_value;
-                }
+                // temp = sqrt(x * x + y * y);
+                temp_value = (int) Math.round(Math.sqrt(Math.pow((double)calculateSobelWeight(vertical_kernel, pixels, row, col), 2.0d) + Math.pow((double)calculateSobelWeight(horizontal_kernel, pixels, row, col), 2.0d)));
+                
+                weights[row][col] += temp_value;
+                sum += temp_value;
             }
         }
 
@@ -910,7 +896,7 @@ public class ImageManipulator {
         boolean choice_is_valid = false;
 
         while(!choice_is_valid){
-            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask, (5) Edge Detection");
+            choice = getString(scanner, "What type of image manipulation do you want to perform?\n(1) Pixel Sorting   (2) Make Greyscale   (3) Blur   (4) Create Image Mask   (5) Edge Detection");
 
             if(arrayContainsString(valid_choices, choice)){
                 choice_is_valid = true;
