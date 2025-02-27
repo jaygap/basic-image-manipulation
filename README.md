@@ -10,8 +10,6 @@
     - Biliniear
     - Bicubic
 - Add image cropping option
-- Add more masking options [being worked on]
-    - Custom thresholds
 
 ## Known Bugs / Issues
 - Box blur is VERY slow for larger box sizes (not a priority to fix)
@@ -31,4 +29,5 @@
 - Make an image greyscale based off luminance and brightness
 - Make a mask of an image with automatically calculated thresholds (Otsu's method) 
     - Supports luminance and rgb (each component separately)
+- Make a mask of an image with a designated threshold
 - Edge detection

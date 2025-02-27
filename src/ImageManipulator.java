@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.util.Scanner;
 import javax.imageio.ImageIO;
 
-
 public class ImageManipulator {
 
     public static void main(String[] args) throws IOException {
@@ -424,20 +423,20 @@ public class ImageManipulator {
         final int WHITE = 0xffffffff; //left most 0xff000000 is so that the image is not transparent
         final int BLACK = 0xff000000;
 
-        final int THRESHOLD = otsuThreshold(pixels, property_to_mask_with);
+        final int THRESHOLD = (useCustomThreshold(new Scanner(System.in)) ? getCustomThreshold(new Scanner(System.in)) : otsuThreshold(pixels, property_to_mask_with));
 
         for(int row = 0; row < pixels.length; row++){
             for(int col = 0; col < pixels[0].length; col++){
                 int value = getPixelProperty(pixels[row][col], property_to_mask_with);
 
-                if(THRESHOLD < 128){
-                    if(value <= THRESHOLD){
+                if((THRESHOLD & 0x100) == 0x100){
+                    if(value <= (THRESHOLD & 0xff)){
                         array_to_write_to[row][col] = WHITE;
                     } else{
                         array_to_write_to[row][col] = BLACK;
                     }
                 } else{
-                    if(value >= THRESHOLD){
+                    if(value >= (THRESHOLD & 0xff)){
                         array_to_write_to[row][col] = WHITE;
                     } else{
                         array_to_write_to[row][col] = BLACK;
@@ -447,6 +446,34 @@ public class ImageManipulator {
         }
 
         return array_to_write_to;
+    }
+
+    private static boolean useCustomThreshold(Scanner scanner){
+        return getBoolean(scanner, "Would you like to use a custom threshold for masking? (y/n)", new String[] {"y", "n"});
+    }
+
+    private static int getCustomThreshold(Scanner scanner){
+        int threshold = 0;
+        boolean white_below_threshold;
+        boolean is_valid = false;
+
+        while(!is_valid){
+            threshold = getInt(scanner, "Enter the value for the threshold (>=0 and <256)");
+
+            if(threshold >= 0 && threshold < 256){
+                is_valid = true;
+            } else{
+                System.out.println("Threshold not in range. It must be >=0 and <256");
+            }
+        }
+
+        white_below_threshold = getBoolean(scanner, "Should white be used for values that are (a)bove or equal to the threshold, or values (b)elow it? (a/b)", new String[] {"b", "a"});
+
+        if(white_below_threshold){
+            threshold += 0x100;
+        }
+
+        return threshold;
     }
 
     private static boolean useMask(Scanner scanner){
@@ -518,6 +545,10 @@ public class ImageManipulator {
             }
         }
 
+        if(highest_variance > 128){
+            highest_variance_index += 0x100;
+        }
+
         return highest_variance_index;
     }
 
@@ -532,7 +563,7 @@ public class ImageManipulator {
 
     //#endregion
 
-    //Edge detection methods
+    //Edge detection methods 
     //#region
 
     private static int[][] detectEdges(BufferedImage img, Scanner scanner){
@@ -607,10 +638,19 @@ public class ImageManipulator {
         return weight;
     }
 
+    private static int[][] cannyEdgeDetection(int[][] pixels){
+        // 1. gaussian blur //might have to rework some methods again :))))
+        // 2. find intensity (via some kind of operator (sobel bc already done it))
+        // 3. apply threshold to get rid of false edges
+        // 4. apply double threshold (???) to determine potential edges
+        // 5. track edge by hysteresis
+        //  5.1. done by blob analysis (look at 8 neighbours)
+    }
+
     //#endregion
 
     // GENERIC METHODS
-    //#region
+    //#regionz
 
     private static char getCharLimited(Scanner scanner, String message, char[] valid_chars){
         char response = ' ';
@@ -751,12 +791,12 @@ public class ImageManipulator {
     }
 
     private static File getImageFile(Scanner scanner){
-        String image_path = getString(scanner, "Enter the full path of the image you want to pixel sort.");
+        String image_path = getString(scanner, "Enter the full path of the image you want to manipulate.");
         File image = new File(image_path);
         
         while(!isFileValid(image)){
             System.out.println("File path is invalid, please try again.");
-            image_path = getString(scanner, "Enter the full path of the image you want to pixel sort.");
+            image_path = getString(scanner, "Enter the full path of the image you want to manipulate.");
             image = new File(image_path);
         }
 
