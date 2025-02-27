@@ -638,19 +638,19 @@ public class ImageManipulator {
         return weight;
     }
 
-    private static int[][] cannyEdgeDetection(int[][] pixels){
+    /*private static int[][] cannyEdgeDetection(int[][] pixels){
         // 1. gaussian blur //might have to rework some methods again :))))
         // 2. find intensity (via some kind of operator (sobel bc already done it))
         // 3. apply threshold to get rid of false edges
         // 4. apply double threshold (???) to determine potential edges
         // 5. track edge by hysteresis
         //  5.1. done by blob analysis (look at 8 neighbours)
-    }
+    }*/
 
     //#endregion
 
     // GENERIC METHODS
-    //#regionz
+    //#region
 
     private static char getCharLimited(Scanner scanner, String message, char[] valid_chars){
         char response = ' ';
