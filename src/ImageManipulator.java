@@ -368,9 +368,9 @@ public class ImageManipulator {
         char blur_type = removeHyphenBeforeArg(args[2]);
 
         if(blur_type == 'b'){
-            pixels = boxBlur(img, size);
+            pixels = boxBlur(pixels, size);
         } else if (blur_type == 'g'){
-            pixels = gaussianBlur(img, size);
+            pixels = gaussianBlur(pixels, size);
         }
         
         saveImage(args[args.length - 1], createImage(pixels, img));
@@ -383,13 +383,13 @@ public class ImageManipulator {
         int size = 0;
 
         if (blur_type == 'b') {
-            pixels = boxBlur(img, getInt(scanner, "Enter a size for the box blur:"));
+            pixels = boxBlur(get2DPixelArray(img), getInt(scanner, "Enter a size for the box blur:"));
         } else if (blur_type == 'g') {
             while (size < 1 || size > 25) {
                 size = getInt(scanner, "Enter a size for the gaussian blur (max 15):");
 
                 if (size >= 1 && size <= 15) {
-                    pixels = gaussianBlur(img, size);
+                    pixels = gaussianBlur(get2DPixelArray(img), size);
                 }
             }
 
@@ -401,10 +401,9 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static int[][] boxBlur(BufferedImage img, int box_size) {
-        int[][] pixels = get2DPixelArray(img);
-        int height = img.getHeight();
-        int width = img.getWidth();
+    private static int[][] boxBlur(int[][] pixels, int box_size) {
+        int height = pixels.length;
+        int width = pixels[0].length;
 
         for (int row = 0; row < height; row++) {
             for (int col = 0; col < width; col++) {
@@ -415,10 +414,9 @@ public class ImageManipulator {
         return pixels;
     }
 
-    private static int[][] gaussianBlur(BufferedImage img, int size) {
+    private static int[][] gaussianBlur(int[][] pixels, int size) {
         final long[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
-        int[][] pixels = get2DPixelArray(img);
-        final int width = img.getWidth(), height = img.getHeight();
+        final int width = pixels.length, height = pixels[0].length;
 
         for (int row = 0; row < height; row++) {
             for (int col = 0; col < width; col++) {
@@ -728,12 +726,12 @@ public class ImageManipulator {
         final int BLACK = 0xff000000;
 
         final int[][] horizontal_kernel = new int[][] { { -1, 0, 1 },
-                { -2, 0, 2 },
-                { -1, 0, 1 } };
+                                                        { -2, 0, 2 },
+                                                        { -1, 0, 1 } };
 
-        final int[][] vertical_kernel = new int[][] { { 1, 2, 1 },
-                { 0, 0, 0 },
-                { -1, -2, -1 } };
+        final int[][] vertical_kernel = new int[][] {   { 1, 2, 1 },
+                                                        { 0, 0, 0 },
+                                                        { -1, -2, -1 } };
 
         int[][] weights = new int[pixels.length][pixels[0].length];
         final int width = pixels[0].length, height = pixels.length;
@@ -794,6 +792,27 @@ public class ImageManipulator {
      * // 5.1. done by blob analysis (look at 8 neighbours)
      * }
      */
+
+    private static int[][] cannyEdgeDetection(int[][] pixels){
+        final int GAUSSIAN_BLUR_KERNEL_SIZE = 5;
+        pixels = gaussianBlur(pixels, GAUSSIAN_BLUR_KERNEL_SIZE);
+
+        final int[][] horizontal_kernel = new int[][] { { -1, 0, 1 },
+                                                        { -2, 0, 2 },
+                                                        { -1, 0, 1 } };
+
+        final int[][] vertical_kernel = new int[][] {   { 1, 2, 1 },
+                                                        { 0, 0, 0 },
+                                                        { -1, -2, -1 } };
+
+        int[][] sobel_weights = new int[pixels.length][pixels[0].length];
+
+        for(int row = 0; row < pixels.length; row++){
+            for(int col = 0; col < pixels[0].length; col++){
+                
+            }
+        }
+    }
 
     // #endregion
 
