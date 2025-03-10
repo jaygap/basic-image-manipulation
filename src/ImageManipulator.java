@@ -22,7 +22,7 @@ public class ImageManipulator {
             case 'g' -> greyscale(args);
             case 'b' -> blur(args);
             case 'm' -> mask(args);
-            //case 'e' -> edgeDetection(args);
+            case 'e' -> edgeDetection(args);
             default -> {
                 File image_file = getImageFile(scanner);
                 WritableRaster edited_image;
@@ -701,6 +701,19 @@ public class ImageManipulator {
 
     // Edge detection methods
     // #region
+
+    private static void edgeDetection(String[] args) throws IOException{
+        BufferedImage img = ImageIO.read(new File(args[0]));
+        int[][] pixels = get2DPixelArray(img);
+        char detection_type = removeHyphenBeforeArg(args[2]);
+
+        pixels = switch (detection_type){
+            case 's' -> sobelEdgeDetection(pixels);
+            default -> pixels;
+        };
+
+        saveImage(args[args.length - 1], createImage(pixels, img));
+    }
 
     private static int[][] detectEdges(BufferedImage img, Scanner scanner) {
         int[][] pixels = get2DPixelArray(img);
