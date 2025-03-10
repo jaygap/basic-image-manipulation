@@ -3,6 +3,7 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Scanner;
 import javax.imageio.ImageIO;
 
@@ -10,45 +11,76 @@ public class ImageManipulator {
 
     public static void main(String[] args) throws IOException {
         char manipulation_type = validateArguments(args);
-        
+
         Scanner scanner = new Scanner(System.in);
         int[][] pixel_array = new int[0][0];
 
-        switch (manipulation_type){
-            case '0' -> promptedManipulation(scanner);
-            case 's' -> pixelSort(args);
-            case 'g' -> greyscale(args);
-            case 'b' -> blur(args);
-            case 'm' -> mask(args);
-            case 'e' -> edgeDetection(args);
-            default -> {}
-        }
-
-        File image_file = getImageFile(scanner);
-        WritableRaster edited_image;
-
-        String manipulation_type = getManipulationType(scanner);
-        BufferedImage img = ImageIO.read(image_file);
-        String file_name;
-
         switch (manipulation_type) {
-            case "1" -> pixel_array = sortPixels(img, scanner);
-            case "2" -> pixel_array = makeGreyscale(img, scanner);
-            case "3" -> pixel_array = performBlur(img, scanner);
-            case "4" -> pixel_array = createMask(img, scanner);
-            case "5" -> pixel_array = detectEdges(img, scanner);
+            case '1' -> System.out.println("You have provided invalid arguments. Stopping.");
+            case 's' -> pixelSort(args);
+            //case 'g' -> greyscale(args);
+            //case 'b' -> blur(args);
+            //case 'm' -> mask(args);
+            //case 'e' -> edgeDetection(args);
             default -> {
+                File image_file = getImageFile(scanner);
+                WritableRaster edited_image;
+
+                String manipulation = getManipulationType(scanner);
+                BufferedImage img = ImageIO.read(image_file);
+                String file_name;
+
+                switch (manipulation) {
+                    case "1" -> pixel_array = sortPixels(img, scanner);
+                    case "2" -> pixel_array = makeGreyscale(img, scanner);
+                    case "3" -> pixel_array = performBlur(img, scanner);
+                    case "4" -> pixel_array = createMask(img, scanner);
+                    case "5" -> pixel_array = detectEdges(img, scanner);
+                    default -> {
+                    }
+                }
+
+                edited_image = createImage(pixel_array, img);
+
+                file_name = getString(scanner, "What do you wish to save your file as? (do not include filetype)");
+                saveImage(file_name, edited_image);
             }
         }
-
-        edited_image = createImage(pixel_array, img);
-
-        file_name = getString(scanner, "What do you wish to save your file as? (do not include filetype)");
-        saveImage(file_name, edited_image);
     }
 
     // Pixel sorting methods
     // #region
+
+    private static void pixelSort(String[] args) throws IOException{
+        BufferedImage img = ImageIO.read(new File(args[0]));
+        int[][] pixels = get2DPixelArray(img);
+        int height = pixels.length, width = pixels[0].length;
+        char sorting_property = removeHyphenBeforeArg(args[2]);
+        char sort_order = removeHyphenBeforeArg(args[3]);
+        boolean sort_vertical = (removeHyphenBeforeArg(args[4]) == 'v' ? true : false);
+        boolean use_mask = (removeHyphenBeforeArg(args[5]) == 'm' ? true : false);
+        boolean use_edge_detection = (use_mask && removeHyphenBeforeArg(args[6]) == 'e' ? true : false);
+        char edge_detection_type = (use_edge_detection ? removeHyphenBeforeArg(args[7]) : '0');
+        char masking_property = (!use_edge_detection ? removeHyphenBeforeArg(args[6]) : '0');
+
+        if(use_mask){
+            int[][] mask_of_pixels = new int[height][width];
+
+            if(use_edge_detection){
+                if(edge_detection_type == 's'){
+                    mask_of_pixels = sobelEdgeDetection(pixels);
+                }
+            } else{
+                mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, masking_property);
+            }
+
+            pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_order, sort_vertical);
+        } else{
+            pixels = sortPixelWihtoutMask(pixels, height, width, sorting_property, sort_order, sort_vertical);
+        }
+
+        saveImage(args[args.length - 1], createImage(pixels, img));
+    }
 
     private static int[][] sortPixels(BufferedImage img, Scanner scanner) {
         int[][] pixels = get2DPixelArray(img);
@@ -691,54 +723,71 @@ public class ImageManipulator {
     // GENERIC METHODS
     // #region
 
-    //returns '0' if the arguments are not given, '1' if the arguments are not valid, 's' if the arguments are for sorting, 'g' if the arguments are for making greyscale, 
-    // 'b' if the  arguments are for blurring, 'm' if the arguments are for masking or 'e' if the arguments are for edge detection.
-    private static char validateArguments(String[] args){
-        if(args.length == 0){
+    private static char removeHyphenBeforeArg(String arg){
+        return arg.split("-")[1].charAt(0);
+    }
+
+    // returns '0' if the arguments are not given, '1' if the arguments are not
+    // valid, 's' if the arguments are for sorting, 'g' if the arguments are for
+    // making greyscale,
+    // 'b' if the arguments are for blurring, 'm' if the arguments are for masking
+    // or 'e' if the arguments are for edge detection.
+    private static char validateArguments(String[] args) {
+        if (args.length == 0) {
             return '0';
         }
 
         String colour_pattern = "-(r|red|g|green|b|blue|l|luminance|h|hue)";
 
-        if(!new File(args[0]).exists()){
+        if (!new File(args[0]).exists()) {
             System.out.println(args[0] + " is not a valid file path.");
             return '1';
-        } else if(!new File(args[args.length - 1]).exists()){
-            System.out.println(args[1] + " is not a valid file path.");
+        } else if (new File(args[args.length - 1]).exists()) {
+            System.out.println(args[args.length - 1] + " is not a valid file path as the file already exist.");
             return '1';
         }
 
-        if(args[1].matches("-(s|sort)")){
-            if(!args[2].matches(colour_pattern)){
+        if (args[1].matches("-(s|sort)")) {
+            if (!args[2].matches(colour_pattern)) {
                 System.out.println(args[2] + " does not match the regex: " + colour_pattern);
                 return '1';
             }
 
-            if(!args[3].matches("-(a|ascending|d|descending)")){
+            if(!args[3].matches("-(a|ascending|d|descending)")) {
                 System.out.println(args[3] + " does not match the regex: -(a|ascending|d|descending)");
                 return '1';
             }
 
-            if(args[4].matches("-(m|mask)")){
-                if(args[5].matches("-(e|edge|n|no-edge)")){
-                    if(!args[6].matches(colour_pattern)){
-                        System.out.println(args[6] + " does not match the regex: " + colour_pattern);
+            if(!args[4].matches("-(v|vertical|h|horizontal)")){
+                System.out.println(args[4] + " does not match the regex: -(v|vertical|h|horizontal)");
+                return '1';
+            }
+
+            if (args[5].matches("-(m|mask)")) {
+                if (args[6].matches("-(n|no-edge)")) {
+                    if (!args[7].matches(colour_pattern)) {
+                        System.out.println(args[7] + " does not match the regex: " + colour_pattern);
                         return '1';
                     }
+                } else if(args[6].matches("-(e|edge)")){
+                    if(!args[7].matches("-(s|sobel)")){
+                        System.out.println(args[7] + " does not match the regex: -(s|sobel)");
+                    }
+                    
                 } else{
-                    System.out.println(args[5] + " does not match the regex: -(e|edge|n|no-edge)");
+                    System.out.println(args[6] + " does not match the regex: -(e|edge|n|no-edge)");
                     return '1';
                 }
-            } else if(!args[4].matches("-(n|no-mask)")){
-                System.out.println(args[4] + " does not match the regex: -(m|mask|n|no-mask)");
+            } else if (!args[5].matches("-(n|no-mask)")) {
+                System.out.println(args[5] + " does not match the regex: -(m|mask|n|no-mask)");
                 return '1';
             }
 
             return 's';
         }
 
-        if(args[1].matches("-(g|greyscale|grayscale)")){
-            if(!args[2].matches("-(l|luminance|b|brightness)")){
+        if (args[1].matches("-(g|greyscale|grayscale)")) {
+            if (!args[2].matches("-(l|luminance|b|brightness)")) {
                 System.out.println(args[2] + " does not match the regex: -(l|luminance|b|brightness)");
                 return '1';
             }
@@ -746,13 +795,13 @@ public class ImageManipulator {
             return 'g';
         }
 
-        if(args[1].matches("-(m|mask)")){
-            if(args[2].matches("-(e|edge|n|no-edge)")){
-                if(!args[3].matches(colour_pattern)){
+        if (args[1].matches("-(m|mask)")) {
+            if (args[2].matches("-(e|edge|n|no-edge)")) {
+                if (!args[3].matches(colour_pattern)) {
                     System.out.println(args[3] + " does not match the regex: " + colour_pattern);
                     return '1';
                 }
-            } else{
+            } else {
                 System.out.println(args[2] + " does not match the regex: -(e|edge|n|no-edge)");
                 return '1';
             }
@@ -760,8 +809,8 @@ public class ImageManipulator {
             return 'm';
         }
 
-        if(args[1].matches("-(e|edge|edge-detection)")){
-            if(!args[2].matches("-(s|sobel)")){
+        if (args[1].matches("-(e|edge|edge-detection)")) {
+            if (!args[2].matches("-(s|sobel)")) {
                 System.out.println(args[2] + " does not match the regex: -(s|sobel)");
                 return '1';
             }
@@ -769,8 +818,8 @@ public class ImageManipulator {
             return 'e';
         }
 
-        if(args[1].matches("-(b|blur)")){
-            if(!args[2].matches("-(b|box|g|gaussian)")){
+        if (args[1].matches("-(b|blur)")) {
+            if (!args[2].matches("-(b|box|g|gaussian)")) {
                 System.out.println(args[2] + " does not match the regex: -(b|box|g|gaussian)");
                 return '1';
             }
