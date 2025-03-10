@@ -3,8 +3,6 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Paths;
 import java.util.Scanner;
 import javax.imageio.ImageIO;
 
@@ -71,8 +69,6 @@ public class ImageManipulator {
             if(use_edge_detection){
                 if(edge_detection_type == 's'){
                     mask_of_pixels = sobelEdgeDetection(get2DPixelArray(img));
-                    
-                    saveImage("~/Pictures/sobel-mask-test", createImage(mask_of_pixels, img));
                 }
             } else{
                 mask_of_pixels = maskArray(pixels, mask_of_pixels, masking_property, threshold);
@@ -681,8 +677,6 @@ public class ImageManipulator {
             }
         }
 
-        System.out.println(highest_variance_index);
-
         return highest_variance_index;
     }
 
@@ -1171,26 +1165,18 @@ public class ImageManipulator {
 
     private static int calculateHue(int abgr) {
         double red, green, blue;
-        double max, min;
         double hue = 0;
 
         red = (double) (abgr & 0x000000ff) / 256.0d;
         green = (double) ((abgr & 0x0000ff00) >>> 8) / 256.0d;
         blue = (double) ((abgr & 0x00ff0000) >>> 16) / 256.0d;
 
-        max = Math.max(Math.max(red, green), blue);
-        min = Math.min(Math.min(red, green), blue);
+        hue = Math.atan2(Math.sqrt(3) * (green - blue), 2 * red - green - blue);
 
-        if (red >= green && red >= blue) {
-            hue = (int) ((green - blue) / (max - min) * 60);
-        } else if (green >= red && green >= blue) {
-            hue = (int) ((2 + (blue - red) / (max - min)) * 60);
-        } else if (blue >= red && blue >= green) {
-            hue = (int) ((4 + (red - green) / (max - min)) * 60);
-        }
-
-        if (hue < 0) {
+        if(hue < 0){
             hue += 360;
+        } else if (hue > 360){
+            hue -= 360;
         }
 
         return (int) (hue * (17.0d / 24.0d)); // scales hue from 0-360 to 0-255
