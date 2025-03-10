@@ -21,7 +21,7 @@ public class ImageManipulator {
             case 's' -> pixelSort(args);
             case 'g' -> greyscale(args);
             case 'b' -> blur(args);
-            //case 'm' -> mask(args);
+            case 'm' -> mask(args);
             //case 'e' -> edgeDetection(args);
             default -> {
                 File image_file = getImageFile(scanner);
@@ -520,6 +520,22 @@ public class ImageManipulator {
     // Masking methods
     // #region
 
+    private static void mask(String[] args) throws IOException{
+        BufferedImage img = ImageIO.read(new File(args[0]));
+        int[][] pixels = get2DPixelArray(img);
+        boolean use_edge_detection = (removeHyphenBeforeArg(args[2]) == 'e' ? true : false);
+        char property_to_mask = removeHyphenBeforeArg(args[3]);
+        int threshold = (!use_edge_detection ? Integer.parseInt(args[4]) : 0);
+
+        if(use_edge_detection){
+            pixels = sobelEdgeDetection(pixels);
+        } else{
+            pixels = maskArray(pixels, pixels, property_to_mask, threshold);
+        }
+
+        saveImage(args[args.length - 1], createImage(pixels, img));
+    }
+
     private static int[][] createMask2DArray(int[][] pixels, int[][] array_to_write_to, char property_to_mask_with) {
         final int WHITE = 0xffffffff; // left most 0xff000000 is so that the image is not transparent
         final int BLACK = 0xff000000;
@@ -531,18 +547,10 @@ public class ImageManipulator {
             for (int col = 0; col < pixels[0].length; col++) {
                 int value = getPixelProperty(pixels[row][col], property_to_mask_with);
 
-                if (THRESHOLD > 128) {
-                    if (value <= (THRESHOLD & 0xff)) {
-                        array_to_write_to[row][col] = WHITE;
-                    } else {
-                        array_to_write_to[row][col] = BLACK;
-                    }
+                if (value >= (THRESHOLD & 0xff)) {
+                    array_to_write_to[row][col] = WHITE;
                 } else {
-                    if (value >= (THRESHOLD & 0xff)) {
-                        array_to_write_to[row][col] = WHITE;
-                    } else {
-                        array_to_write_to[row][col] = BLACK;
-                    }
+                    array_to_write_to[row][col] = BLACK;
                 }
             }
         }
@@ -562,18 +570,10 @@ public class ImageManipulator {
             for (int col = 0; col < pixels[0].length; col++) {
                 int value = getPixelProperty(pixels[row][col], property_to_mask_with);
 
-                if (THRESHOLD > 128) {
-                    if (value <= (THRESHOLD & 0xff)) {
-                        array_to_write_to[row][col] = WHITE;
-                    } else {
-                        array_to_write_to[row][col] = BLACK;
-                    }
+                if (value >= (THRESHOLD & 0xff)) {
+                    array_to_write_to[row][col] = WHITE;
                 } else {
-                    if (value >= (THRESHOLD & 0xff)) {
-                        array_to_write_to[row][col] = WHITE;
-                    } else {
-                        array_to_write_to[row][col] = BLACK;
-                    }
+                    array_to_write_to[row][col] = BLACK;
                 }
             }
         }
@@ -872,6 +872,9 @@ public class ImageManipulator {
             if (args[2].matches("-(e|edge|n|no-edge)")) {
                 if (!args[3].matches(colour_pattern)) {
                     System.out.println(args[3] + " does not match the regex: " + colour_pattern);
+                    return '1';
+                } else if(!checkIfInt(args[4])){
+                    System.out.println(args[4] + " is not an integer. If you want to set a custom threshold give a number >=0 and <256. If you want one calculated via Otsu's method, give -1.");
                     return '1';
                 }
             } else {
