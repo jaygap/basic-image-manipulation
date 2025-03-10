@@ -19,7 +19,7 @@ public class ImageManipulator {
         switch (manipulation_type) {
             case '1' -> System.out.println("You have provided invalid arguments. Stopping.");
             case 's' -> pixelSort(args);
-            //case 'g' -> greyscale(args);
+            case 'g' -> greyscale(args);
             case 'b' -> blur(args);
             //case 'm' -> mask(args);
             //case 'e' -> edgeDetection(args);
@@ -314,9 +314,32 @@ public class ImageManipulator {
     // Greyscale methods
     // #region
 
+    private static void greyscale(String[] args) throws IOException{
+        boolean use_luminance = (removeHyphenBeforeArg(args[2]) == 'l' ? true : false);
+        BufferedImage img = ImageIO.read(new File(args[0]));
+        int[][] pixels = get2DPixelArray(img);
+
+        int grey;
+        int greyscale_colour;
+
+        for (int[] pixel_row : pixels) {
+            for (int col = 0; col < pixel_row.length; col++) {
+                if (use_luminance) {
+                    grey = calculateLuminance(pixel_row[col]);
+                } else {
+                    grey = calculateBrightness(pixel_row[col]);
+                }
+
+                greyscale_colour = (grey << 16) + (grey << 8) + grey;
+                pixel_row[col] = greyscale_colour;
+            }
+        }
+
+        saveImage(args[args.length - 1], createImage(pixels, img));
+    }
+
     private static int[][] makeGreyscale(BufferedImage img, Scanner scanner) {
-        boolean use_luminance = getBoolean(scanner,
-                "Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] { "l", "b" });
+        boolean use_luminance = getBoolean(scanner,"Do you want to make the image greyscale by (l)uminance or (b)rightness", new String[] { "l", "b" });
         int[][] pixels = get2DPixelArray(img);
         int grey;
         int greyscale_colour;
