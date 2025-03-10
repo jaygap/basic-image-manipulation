@@ -3,7 +3,8 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Paths;
 import java.util.Scanner;
 import javax.imageio.ImageIO;
 
@@ -19,7 +20,7 @@ public class ImageManipulator {
             case '1' -> System.out.println("You have provided invalid arguments. Stopping.");
             case 's' -> pixelSort(args);
             //case 'g' -> greyscale(args);
-            //case 'b' -> blur(args);
+            case 'b' -> blur(args);
             //case 'm' -> mask(args);
             //case 'e' -> edgeDetection(args);
             default -> {
@@ -61,17 +62,20 @@ public class ImageManipulator {
         boolean use_mask = (removeHyphenBeforeArg(args[5]) == 'm' ? true : false);
         boolean use_edge_detection = (use_mask && removeHyphenBeforeArg(args[6]) == 'e' ? true : false);
         char edge_detection_type = (use_edge_detection ? removeHyphenBeforeArg(args[7]) : '0');
-        char masking_property = (!use_edge_detection ? removeHyphenBeforeArg(args[6]) : '0');
+        char masking_property = (!use_edge_detection && use_mask ? removeHyphenBeforeArg(args[7]) : '0');
+        int threshold = (use_mask && !use_edge_detection ? Integer.parseInt(args[8]) : 0);
 
         if(use_mask){
             int[][] mask_of_pixels = new int[height][width];
 
             if(use_edge_detection){
                 if(edge_detection_type == 's'){
-                    mask_of_pixels = sobelEdgeDetection(pixels);
+                    mask_of_pixels = sobelEdgeDetection(get2DPixelArray(img));
+                    
+                    saveImage("~/Pictures/sobel-mask-test", createImage(mask_of_pixels, img));
                 }
             } else{
-                mask_of_pixels = createMask2DArray(pixels, mask_of_pixels, masking_property);
+                mask_of_pixels = maskArray(pixels, mask_of_pixels, masking_property, threshold);
             }
 
             pixels = sortPixelWithMask(pixels, mask_of_pixels, height, width, sorting_property, sort_order, sort_vertical);
@@ -338,6 +342,21 @@ public class ImageManipulator {
     // Blur methods
     // #region
 
+    private static void blur(String[] args) throws IOException{
+        BufferedImage img = ImageIO.read(new File(args[0]));
+        int[][] pixels = get2DPixelArray(img);
+        int size = Integer.parseInt(args[3]);
+        char blur_type = removeHyphenBeforeArg(args[2]);
+
+        if(blur_type == 'b'){
+            pixels = boxBlur(img, size);
+        } else if (blur_type == 'g'){
+            pixels = gaussianBlur(img, size);
+        }
+        
+        saveImage(args[args.length - 1], createImage(pixels, img));
+    }
+
     private static int[][] performBlur(BufferedImage img, Scanner scanner) {
         char blur_type = getCharLimited(scanner, "Choose the type of blur to perform: (b)ox blur, (g)aussian blur",
                 new char[] { 'b', 'g' });
@@ -489,7 +508,7 @@ public class ImageManipulator {
             for (int col = 0; col < pixels[0].length; col++) {
                 int value = getPixelProperty(pixels[row][col], property_to_mask_with);
 
-                if ((THRESHOLD & 0x100) == 0x100) {
+                if (THRESHOLD > 128) {
                     if (value <= (THRESHOLD & 0xff)) {
                         array_to_write_to[row][col] = WHITE;
                     } else {
@@ -506,6 +525,37 @@ public class ImageManipulator {
         }
 
         return array_to_write_to;
+    }
+
+    private static int[][] maskArray(int[][] pixels, int[][] array_to_write_to, char property_to_mask_with, int THRESHOLD){
+        final int WHITE = 0xffffffff; // left most 0xff000000 is so that the image is not transparent
+        final int BLACK = 0xff000000;
+
+        if(THRESHOLD == -1){
+            THRESHOLD = otsuThreshold(pixels, property_to_mask_with);
+        }
+
+        for (int row = 0; row < pixels.length; row++) {
+            for (int col = 0; col < pixels[0].length; col++) {
+                int value = getPixelProperty(pixels[row][col], property_to_mask_with);
+
+                if (THRESHOLD > 128) {
+                    if (value <= (THRESHOLD & 0xff)) {
+                        array_to_write_to[row][col] = WHITE;
+                    } else {
+                        array_to_write_to[row][col] = BLACK;
+                    }
+                } else {
+                    if (value >= (THRESHOLD & 0xff)) {
+                        array_to_write_to[row][col] = WHITE;
+                    } else {
+                        array_to_write_to[row][col] = BLACK;
+                    }
+                }
+            }
+        }
+
+        return array_to_write_to;   
     }
 
     private static boolean useCustomThreshold(Scanner scanner) {
@@ -598,8 +648,7 @@ public class ImageManipulator {
             mu_foreground /= mean_number;
             weight_foreground /= range;
 
-            square_variance[i] = weight_background * weight_foreground
-                    * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
+            square_variance[i] = weight_background * weight_foreground * ((mu_background - mu_foreground) * (mu_background - mu_foreground));
         }
 
         for (int i = 0; i < square_variance.length; i++) {
@@ -609,9 +658,7 @@ public class ImageManipulator {
             }
         }
 
-        if (highest_variance > 128) {
-            highest_variance_index += 0x100;
-        }
+        System.out.println(highest_variance_index);
 
         return highest_variance_index;
     }
@@ -742,9 +789,6 @@ public class ImageManipulator {
         if (!new File(args[0]).exists()) {
             System.out.println(args[0] + " is not a valid file path.");
             return '1';
-        } else if (new File(args[args.length - 1]).exists()) {
-            System.out.println(args[args.length - 1] + " is not a valid file path as the file already exist.");
-            return '1';
         }
 
         if (args[1].matches("-(s|sort)")) {
@@ -769,9 +813,15 @@ public class ImageManipulator {
                         System.out.println(args[7] + " does not match the regex: " + colour_pattern);
                         return '1';
                     }
+
+                    if(!checkIfInt(args[8])){
+                        System.out.println(args[8] + " is not an integer. If you want to set a custom threshold give a number >=0 and <256. If you want one calculated via Otsu's method, give -1.");
+                        return '1';
+                    }
                 } else if(args[6].matches("-(e|edge)")){
                     if(!args[7].matches("-(s|sobel)")){
                         System.out.println(args[7] + " does not match the regex: -(s|sobel)");
+                        return '1';
                     }
                     
                 } else{
@@ -822,6 +872,21 @@ public class ImageManipulator {
             if (!args[2].matches("-(b|box|g|gaussian)")) {
                 System.out.println(args[2] + " does not match the regex: -(b|box|g|gaussian)");
                 return '1';
+            } else{
+                if(!checkIfInt(args[3])){
+                    System.out.println(args[3] + " is not an integer.");
+                    return '1';
+                } else{
+                    int size = Integer.parseInt(args[3]);
+
+                    if(size <= 0){
+                        System.out.println(args[3] + " must be greater than 0.");
+                        return '1';
+                    } else if (size > 15 && (args[2].equals("-g") ||args[2].equals("-gaussian"))){
+                        System.out.println("The kernel size limit for gaussian blur is 15. Please enter a number >0 and <=15");
+                        return '1';
+                    }
+                }
             }
 
             return 'b';
