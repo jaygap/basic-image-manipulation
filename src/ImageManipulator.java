@@ -416,7 +416,7 @@ public class ImageManipulator {
 
     private static int[][] gaussianBlur(int[][] pixels, int size) {
         final long[][] GAUSSIAN_DISTRIBUTION = calculateGaussianDistribution(size);
-        final int width = pixels.length, height = pixels[0].length;
+        final int width = pixels[0].length, height = pixels.length;
 
         for (int row = 0; row < height; row++) {
             for (int col = 0; col < width; col++) {
@@ -439,10 +439,8 @@ public class ImageManipulator {
             for (int y = -size; y <= size; y++) {
                 if (row + x >= 0 && row + x < height && col + y >= 0 && col + y < width) {
                     red += (pixels[row + x][col + y] & 0x000000ff) * distribution[mid_point + y][mid_point + x];
-                    green += ((pixels[row + x][col + y] & 0x0000ff00) >>> 8)
-                            * distribution[mid_point + y][mid_point + x];
-                    blue += ((pixels[row + x][col + y] & 0x00ff0000) >>> 16)
-                            * distribution[mid_point + y][mid_point + x];
+                    green += ((pixels[row + x][col + y] & 0x0000ff00) >>> 8) * distribution[mid_point + y][mid_point + x];
+                    blue += ((pixels[row + x][col + y] & 0x00ff0000) >>> 16) * distribution[mid_point + y][mid_point + x];
                     total_distribution_weight += distribution[mid_point + y][mid_point + x];
                 }
             }
@@ -698,9 +696,11 @@ public class ImageManipulator {
         BufferedImage img = ImageIO.read(new File(args[0]));
         int[][] pixels = get2DPixelArray(img);
         char detection_type = removeHyphenBeforeArg(args[2]);
+        int kernel_size = (detection_type == 'c' ? Integer.parseInt(args[3]) : 0);
 
         pixels = switch (detection_type){
             case 's' -> sobelEdgeDetection(pixels);
+            case 'c' -> cannyEdgeDetection(pixels, kernel_size);
             default -> pixels;
         };
 
@@ -711,10 +711,11 @@ public class ImageManipulator {
         int[][] pixels = get2DPixelArray(img);
 
         char detection_type = getCharLimited(scanner, "Enter the type of edge detection you wish to perform: (s)obel",
-                new char[] { 's' });
+                new char[] { 's', 'c' });
 
         pixels = switch (detection_type) {
             case 's' -> sobelEdgeDetection(pixels);
+            case 'c' -> cannyEdgeDetection(pixels, 5);
             default -> pixels;
         };
 
@@ -793,9 +794,12 @@ public class ImageManipulator {
      * }
      */
 
-    private static int[][] cannyEdgeDetection(int[][] pixels){
-        final int GAUSSIAN_BLUR_KERNEL_SIZE = 5;
-        pixels = gaussianBlur(pixels, GAUSSIAN_BLUR_KERNEL_SIZE);
+    private static int[][] cannyEdgeDetection(int[][] pixels, int kernel_size){
+        final int HEIGHT = pixels.length, WIDTH = pixels[0].length;
+        final int WHITE = 0xffffffff, BLACK = 0xff000000;
+
+        //gaussian blur
+        pixels = boxBlur(pixels, kernel_size);
 
         final int[][] horizontal_kernel = new int[][] { { -1, 0, 1 },
                                                         { -2, 0, 2 },
@@ -805,13 +809,95 @@ public class ImageManipulator {
                                                         { 0, 0, 0 },
                                                         { -1, -2, -1 } };
 
-        int[][] sobel_weights = new int[pixels.length][pixels[0].length];
+        int[][] sobel_weights = new int[HEIGHT][WIDTH];
+        int[][] edge_direction = new int[HEIGHT][WIDTH];
+        float horizontal_weight, vertical_weight;
+        int sum = 0;
+        int threshold;
+        int angle;        
 
-        for(int row = 0; row < pixels.length; row++){
-            for(int col = 0; col < pixels[0].length; col++){
-                
+        //sobel operator (both intensity and direction)
+        for(int row = 0; row < HEIGHT; row++){
+            for(int col = 0; col < WIDTH; col++){
+                horizontal_weight = calculateSobelWeight(horizontal_kernel, pixels, row, col);
+                vertical_weight = calculateSobelWeight(vertical_kernel, pixels, row, col);
+                angle = (int) Math.atan(vertical_weight / horizontal_weight);
+
+                if(angle > 180){
+                    angle -= 180;
+                } else if (angle < 0){
+                    angle += 180;
+                }
+
+                if(0 <= angle && angle < 23){
+                    angle = 0;
+                } else if(23 <= angle && angle < 68){
+                    angle = 45;
+                } else if(68 <= angle && angle < 113){
+                    angle = 90;
+                } else if(113 <= angle && angle < 158){
+                    angle = 135;
+                } else if (158 <= angle && angle <= 180){
+                    angle = 0;
+                } else{
+                    System.out.println(angle);
+                }
+
+                edge_direction[row][col] = angle;
+                sobel_weights[row][col] = (int) Math.sqrt(horizontal_weight * horizontal_weight + vertical_weight + vertical_weight);
+                sum += sobel_weights[row][col];
             }
         }
+
+        threshold = sum / (WIDTH * HEIGHT);
+
+        int[][] sobel_weights_suppressed = new int[WIDTH][HEIGHT];
+
+        //thresholding to get rid of false edges (make all edges 1 pixel thick bc we only care about position)
+        for(int row = 0; row < HEIGHT; row++){
+            for(int col = 0; col < WIDTH; col++){
+                
+                //checks if the current value is a maximum compared to neighbours following edge direction;
+                if(edge_direction[row][col] == 0){
+                    //if value is not a maximum
+                    if(!(sobel_weights[row][(col - 1 >= 0 ? col - 1 : 0)] < sobel_weights[row][col] || sobel_weights[row][col] > sobel_weights[row][(col + 1 < WIDTH ? col + 1 : col)])){
+                        sobel_weights_suppressed[row][col] = 0;
+                    } else{
+                        sobel_weights_suppressed[row][col] = sobel_weights[row][col];
+                    }
+                } else if(edge_direction[row][col] == 90){
+                    if(!(sobel_weights[(row - 1 >= 0 ? row - 1 : 0)][col] < sobel_weights[row][col] || sobel_weights[row][col] > sobel_weights[(row + 1 < HEIGHT ? row + 1 : row)][col])){
+                        sobel_weights_suppressed[row][col] = 0;
+                    } else{
+                        sobel_weights_suppressed[row][col] = sobel_weights[row][col];
+                    }
+                } else if(edge_direction[row][col] == 135){
+                    if(!(sobel_weights[(row - 1 >= 0 ? row - 1 : 0)][(col - 1 >= 0 ? col - 1 : 0)] < sobel_weights[row][col] || sobel_weights[row][col] > sobel_weights[(row + 1 < HEIGHT ? row + 1 : row)][(col + 1 < WIDTH ? col + 1 : col)])){
+                        sobel_weights_suppressed[row][col] = 0;
+                    } else{
+                        sobel_weights_suppressed[row][col] = sobel_weights[row][col];
+                    }
+                } else if(edge_direction[row][col] == 45){
+                    if(!(sobel_weights[(row - 1 >= 0 ? row - 1 : 0)][(col + 1 < WIDTH ? col + 1 : col)] < sobel_weights[row][col] || sobel_weights[row][col] > sobel_weights[(row + 1 < HEIGHT ? row + 1 : row)][(col - 1 >= 0 ? col - 1 : 0)])){
+                        sobel_weights_suppressed[row][col] = 0;
+                    } else{
+                        sobel_weights_suppressed[row][col] = sobel_weights[row][col];
+                    }
+                }
+            }
+        }
+
+        for(int row = 0; row < HEIGHT; row++){
+            for(int col = 0; col < WIDTH; col++){
+                if(sobel_weights_suppressed[row][col] > threshold){
+                    pixels[row][col] = BLACK;
+                } else{
+                    pixels[row][col] = WHITE;
+                }
+            }
+        }
+
+        return pixels;
     }
 
     // #endregion
@@ -833,7 +919,10 @@ public class ImageManipulator {
             return '0';
         }
 
-        String colour_pattern = "-(r|red|g|green|b|blue|l|luminance|h|hue)";
+        final String colour_pattern = "-(r|red|g|green|b|blue|l|luminance|h|hue)";
+        final String sort_order = "-(a|ascending|d|descending)";
+        final String sort_direction = "-(v|vertical|h|horizontal)";
+        final String edge_detection_type = "-(s|sobel|c|canny)";
 
         if (!new File(args[0]).exists()) {
             System.out.println(args[0] + " is not a valid file path.");
@@ -846,13 +935,13 @@ public class ImageManipulator {
                 return '1';
             }
 
-            if(!args[3].matches("-(a|ascending|d|descending)")) {
-                System.out.println(args[3] + " does not match the regex: -(a|ascending|d|descending)");
+            if(!args[3].matches(sort_order)) {
+                System.out.println(args[3] + " does not match the regex: " + sort_order);
                 return '1';
             }
 
-            if(!args[4].matches("-(v|vertical|h|horizontal)")){
-                System.out.println(args[4] + " does not match the regex: -(v|vertical|h|horizontal)");
+            if(!args[4].matches(sort_direction)){
+                System.out.println(args[4] + " does not match the regex: " + sort_direction);
                 return '1';
             }
 
@@ -868,8 +957,8 @@ public class ImageManipulator {
                         return '1';
                     }
                 } else if(args[6].matches("-(e|edge)")){
-                    if(!args[7].matches("-(s|sobel)")){
-                        System.out.println(args[7] + " does not match the regex: -(s|sobel)");
+                    if(!args[7].matches(edge_detection_type)){
+                        System.out.println(args[7] + " does not match the regex: " + edge_detection_type);
                         return '1';
                     }
                     
@@ -912,9 +1001,14 @@ public class ImageManipulator {
         }
 
         if (args[1].matches("-(e|edge|edge-detection)")) {
-            if (!args[2].matches("-(s|sobel)")) {
-                System.out.println(args[2] + " does not match the regex: -(s|sobel)");
+            if (!args[2].matches(edge_detection_type)) {
+                System.out.println(args[2] + " does not match the regex: " + edge_detection_type);
                 return '1';
+            } else if(args[2].matches("-(c|canny)")){
+                if(!checkIfInt(args[3]) || Integer.parseInt(args[3]) <= 0){
+                    System.out.println(args[3] + " is not an integer >0.");
+                    return '1';
+                }
             }
 
             return 'e';
@@ -934,7 +1028,7 @@ public class ImageManipulator {
                     if(size <= 0){
                         System.out.println(args[3] + " must be greater than 0.");
                         return '1';
-                    } else if (size > 15 && (args[2].equals("-g") ||args[2].equals("-gaussian"))){
+                    } else if (size > 15 && (args[2].equals("-g") || args[2].equals("-gaussian"))){
                         System.out.println("The kernel size limit for gaussian blur is 15. Please enter a number >0 and <=15");
                         return '1';
                     }
