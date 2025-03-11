@@ -851,7 +851,7 @@ public class ImageManipulator {
 
         threshold = sum / (WIDTH * HEIGHT);
 
-        int[][] sobel_weights_suppressed = new int[WIDTH][HEIGHT];
+        int[][] sobel_weights_suppressed = new int[HEIGHT][WIDTH];
 
         //thresholding to get rid of false edges (make all edges 1 pixel thick bc we only care about position)
         for(int row = 0; row < HEIGHT; row++){
